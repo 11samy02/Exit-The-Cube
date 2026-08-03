@@ -165,13 +165,17 @@ holder = NodePath("../../Objects")
 script = ExtResource("13_blood")
 ink_shader = ExtResource("13_ink")
 holder = NodePath("../../Blood")
-visible_deaths = 25
+visible_deaths = 100
+ink_radius = 3.0
 
 [node name="Footprints" type="Node" parent="Scripts" unique_id=506162330 node_paths=PackedStringArray("holder", "blood_spawner")]
 script = ExtResource("17_steps")
 print_shader = ExtResource("17_print")
 holder = NodePath("../../Blood")
 blood_spawner = NodePath("../Blood Spawner")
+max_prints = 1600
+steps_per_pickup = 16
+print_size = 0.6
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1709855645]
 environment = SubResource("Environment_c3ncp")

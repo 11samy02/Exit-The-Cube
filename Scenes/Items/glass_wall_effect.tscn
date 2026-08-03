@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://c3poqa6p3k4ny"]
 
-[ext_resource type="Script" path="res://Scripts/Items/Effects/glass_wall_effect.gd" id="1_glass"]
+[ext_resource type="Script" uid="uid://y24x5rb4ku4n" path="res://Scripts/Items/Effects/glass_wall_effect.gd" id="1_glass"]
 
-[node name="GlassWallEffect" type="Node"]
+[node name="GlassWallEffect" type="Node" unique_id=48044132]
 script = ExtResource("1_glass")
+vignette_strength = 0.0
