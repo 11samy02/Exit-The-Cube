@@ -24,13 +24,15 @@ extends GridMap
 
 
 ## The campaign decides which level is built, the resource on this node is only
-## what the scene falls back to when it is opened on its own.
+## what the scene falls back to when it is opened on its own. An online race
+## brings its own level along and comes first, it is the one thing that is not
+## picked out of a list but generated from the seed the whole lobby shares.
 ##
 ## The UI reads the run state in its own _ready, and a child is ready before its
 ## parent. Handing the level over here instead of in _ready keeps the UI from
 ## showing the key of the attempt before across a scene reload.
 func _enter_tree() -> void:
-	var level := Levels.current()
+	var level := Online.level() if Online.is_racing() else Levels.current()
 	if level != null:
 		map_data = level
 
@@ -75,6 +77,8 @@ func _ready() -> void:
 
 	if blood_spawner != null:
 		blood_spawner.spawn_marks()
+
+	Online.attach_to_map(self)
 
 
 ## Hands the level over to the spawners, one section per spawner

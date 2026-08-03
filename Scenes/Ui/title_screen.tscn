@@ -124,6 +124,12 @@ custom_minimum_size = Vector2(340, 66)
 layout_mode = 2
 text = "START"
 
+[node name="OnlineButton" type="Button" parent="Layout/Column/MenuColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 66)
+layout_mode = 2
+text = "ONLINE"
+
 [node name="OptionsButton" type="Button" parent="Layout/Column/MenuColumn" unique_id=1152258509]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(340, 66)

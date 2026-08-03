@@ -5,6 +5,8 @@ extends Control
 
 const LEVEL_SCENE := "res://Scenes/Enviroment/map.tscn"
 
+const ONLINE_SCENE := "res://Scenes/Ui/online_menu.tscn"
+
 const START_SOUND := preload("res://Assets/Sounds/UI & Menus/Start.wav")
 
 ## Seconds one breath of the title glow takes
@@ -27,6 +29,7 @@ const START_SOUND := preload("res://Assets/Sounds/UI & Menus/Start.wav")
 @onready var _levels_button: Button = %LevelsButton
 @onready var _level_select: LevelSelect = %LevelSelect
 @onready var _start_button: Button = %StartButton
+@onready var _online_button: Button = %OnlineButton
 @onready var _options_button: Button = %OptionsButton
 @onready var _quit_button: Button = %QuitButton
 @onready var _credits_button: Button = %CreditsButton
@@ -49,7 +52,13 @@ var _intro: Tween = null
 var _starting: bool = false
 
 
+## Standing on the title screen means being in no lobby. A race left through the
+## pause menu would otherwise leave this machine sitting in one, taking a seat
+## the rest of the room can see and nobody is in
 func _ready() -> void:
+	if Online.in_lobby():
+		Online.leave_lobby()
+
 	_sfx = AudioStreamPlayer.new()
 	_sfx.bus = &"sfx"
 	add_child(_sfx)
@@ -58,6 +67,7 @@ func _ready() -> void:
 	_continue_button.pressed.connect(_on_continue_pressed)
 	_levels_button.pressed.connect(_on_levels_pressed)
 	_start_button.pressed.connect(_on_start_pressed)
+	_online_button.pressed.connect(_on_online_pressed)
 	_options_button.pressed.connect(_on_options_pressed)
 	_credits_button.pressed.connect(_on_credits_pressed)
 	_quit_button.pressed.connect(_on_quit_pressed)
@@ -79,7 +89,7 @@ func _build_menu() -> void:
 	_levels_button.visible = SaveGame.unlocked_picks() > 0
 	_start_button.text = "NEW GAME" if _continue_button.visible else "START"
 
-	_buttons = [_start_button, _options_button, _credits_button, _quit_button]
+	_buttons = [_start_button, _online_button, _options_button, _credits_button, _quit_button]
 	if _levels_button.visible:
 		_buttons.push_front(_levels_button)
 	if _continue_button.visible:
@@ -219,6 +229,18 @@ func _on_level_picked(index: int) -> void:
 	Levels.start(index)
 	GameState.start_run()
 	Transition.change_scene(LEVEL_SCENE)
+
+
+## The online side of the game is a screen of its own, everything about it lives
+## behind this one button
+func _on_online_pressed() -> void:
+	if _starting:
+		return
+
+	_starting = true
+	_sfx.stream = START_SOUND
+	_sfx.play()
+	Transition.change_scene(ONLINE_SCENE)
 
 
 func _on_levels_pressed() -> void:

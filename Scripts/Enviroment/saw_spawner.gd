@@ -56,6 +56,15 @@ class_name SawSpawner
 ## they are meant to be watched next to each other
 @export var ai_minds: Array[SawAi.Mind] = []
 
+## How many steps through the corridors a steered saw has to start away from
+## where the player comes in.
+##
+## Keeping it off the one spawn cell is not enough. It walks straight at the cube
+## the moment the level opens, and the spawn animation still owns the cube for
+## the first moment of it — so one that starts around the corner is not a hunter,
+## it is a death the player was never in a position to do anything about
+@export var ai_min_distance_to_player: int = 8
+
 var rng := RandomNumberGenerator.new()
 
 var spawned_saws: Array[Node3D] = []
@@ -116,15 +125,16 @@ func _spawn_ai_saws() -> void:
 	if ai_saw_scene == null or ai_saw_count <= 0:
 		return
 
-	var free_cells := map_generator.get_path_cells().filter(
-		func(c): return not blocked_cells.has(c) and c != _player_cell()
-	)
+	var free_cells := _ai_start_cells()
 
 	if free_cells.is_empty():
 		push_warning("SawSpawner: no free cell left to put a steered saw in")
 		return
 
 	for i in range(ai_saw_count):
+		if free_cells.is_empty():
+			free_cells = _ai_start_cells()
+
 		var saw: Node3D = ai_saw_scene.instantiate()
 		holder.add_child(saw)
 
@@ -143,8 +153,56 @@ func _spawn_ai_saws() -> void:
 		if mover != null:
 			mover.speed = rng.randf_range(min_speed, max_speed)
 
-		brain.setup(map_generator, free_cells[rng.randi_range(0, free_cells.size() - 1)], rng.randi())
+		var at := rng.randi_range(0, free_cells.size() - 1)
+		var start: Vector2i = free_cells[at]
+		free_cells.remove_at(at)
+
+		brain.setup(map_generator, start, rng.randi())
 		spawned_saws.append(saw)
+
+
+## Where a steered saw may be dropped in: a free corridor cell a real walk away
+## from where the player comes in.
+##
+## The distance is counted through the corridors and not across the grid. Two
+## cells with a wall between them are neighbours on the grid and a long way apart
+## on foot, and it is the walk that decides whether the player gets to react at
+## all — measuring across the grid is how a saw ends up one corner away with a
+## wall in between and still counted as far off.
+##
+## A map too small to keep that distance anywhere falls back to whatever cells
+## are farthest off rather than giving up, the same way the key and the exit do
+func _ai_start_cells() -> Array:
+	var free_cells: Array = map_generator.get_path_cells().filter(
+		func(c): return not blocked_cells.has(c)
+	)
+
+	if player_spawner == null or free_cells.is_empty():
+		return free_cells
+
+	var field := map_generator.path_distance_field(_player_cell())
+	var far := free_cells.filter(
+		func(c): return map_generator.distance_in_field(field, c) >= ai_min_distance_to_player
+	)
+
+	if not far.is_empty():
+		return far
+
+	push_warning("SawSpawner: no cell is %d steps from the player, starting the steered saws at the farthest ones" \
+		% ai_min_distance_to_player)
+	return _farthest_from_player(free_cells, field)
+
+
+## The quarter of those cells that is farthest from the player, never fewer than
+## one. Only reached on a map that cannot honour the distance at all
+func _farthest_from_player(cells: Array, field: Array) -> Array:
+	var sorted := cells.duplicate()
+
+	sorted.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return map_generator.distance_in_field(field, a) > map_generator.distance_in_field(field, b))
+
+	sorted.resize(maxi(1, sorted.size() / 4))
+	return sorted
 
 
 ## Which mind the saw at that position gets. The list on the node wins when it
@@ -162,7 +220,7 @@ func _roll_mind(index: int) -> SawAi.Mind:
 	return minds[rng.randi_range(0, minds.size() - 1)]
 
 
-## Where the player starts, so a steered saw is never dropped on top of them
+## Where the player starts, the cell every steered saw is kept a walk away from
 func _player_cell() -> Vector2i:
 	return player_spawner.current_player_cell if player_spawner != null else Vector2i(-1, -1)
 

@@ -13,8 +13,8 @@ config_version=5
 config/name="Exit The Cupe"
 run/main_scene="res://Scenes/Ui/splash.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
-boot_splash/show_image=false
 boot_splash/bg_color=Color(0, 0, 0, 1)
+boot_splash/show_image=false
 config/icon="res://icon.svg"
 
 [audio]
@@ -34,6 +34,7 @@ ItemSystem="*res://Scripts/Items/item_system.gd"
 Quips="*res://Scripts/Ui/quips.gd"
 Music="*res://Scenes/Audio/music.tscn"
 Transition="*res://Scripts/Ui/transition.gd"
+Online="*res://Scripts/Online/online.gd"
 
 [display]
 

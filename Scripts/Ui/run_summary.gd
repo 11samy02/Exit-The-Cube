@@ -62,9 +62,13 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-## Freezes what is left of the map behind the panel and puts the numbers up
+## Freezes what is left of the map behind the panel and puts the numbers up.
+##
+## A race has its own panel with everybody's numbers on it, and it must not
+## freeze the map: the other cubes are still running around in there and this
+## one may want to watch them
 func open() -> void:
-	if _root.visible:
+	if _root.visible or Online.is_racing():
 		return
 
 	_fill()

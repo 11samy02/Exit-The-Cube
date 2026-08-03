@@ -104,8 +104,24 @@ var window_mode: int = MODE_WINDOWED
 
 var resolution := Vector2i(1920, 1080)
 
-## Index into DisplayServer's screen list, the game window lives on that one
+## Index into DisplayServer's screen list, the game window lives on that one.
+## Worked out fresh on every start rather than read straight off the file: the
+## list is renumbered whenever a screen is plugged in or taken away
 var monitor: int = 0
+
+## The screen the player actually picked, written down by what it is instead of
+## by where it stood in the list.
+##
+## An index alone is not a screen. Unplug the first of two and the second one
+## becomes number zero, and a game that saved "screen 1" opens on the wrong panel
+## or, worse, on a number that no longer exists. So the choice is stored as a
+## fingerprint of the panel — where it sits on the desktop, how big it is, how
+## fast it refreshes — and matched back against what is plugged in at start.
+##
+## It also outlives a start without that screen. A laptop taken off its dock
+## should not quietly forget which monitor the player prefers, so this is only
+## ever overwritten when the player picks one, never by falling back
+var _wanted_monitor: String = ""
 
 var vsync: int = DisplayServer.VSYNC_ENABLED
 
@@ -164,6 +180,7 @@ func _ready() -> void:
 	_capture_defaults()
 	_read_project_defaults()
 	_load()
+	_resolve_monitor()
 	apply_graphics()
 	apply_display()
 	apply_interface()
@@ -262,6 +279,70 @@ func apply_bindings() -> void:
 				InputMap.action_add_event(name, event)
 
 	bindings_changed.emit()
+
+
+## Puts the window on that screen and remembers it as the one the player wants.
+## Everything else that moves the window leaves the choice alone, so a fallback
+## onto the primary screen never overwrites what was asked for
+func set_monitor(index: int) -> void:
+	monitor = clampi(index, 0, maxi(DisplayServer.get_screen_count() - 1, 0))
+	_wanted_monitor = _fingerprint_of(monitor)
+	apply_display()
+
+
+## What a screen is, as far as this file is concerned. Position is what tells two
+## identical panels apart, the rest is what tells the same panel apart from a
+## different one that happens to have been moved into its place
+func _fingerprint_of(screen: int) -> String:
+	if screen < 0 or screen >= DisplayServer.get_screen_count():
+		return ""
+
+	var at := DisplayServer.screen_get_position(screen)
+	var size := DisplayServer.screen_get_size(screen)
+
+	return "%d,%d|%dx%d|%d|%d" % [
+		at.x, at.y, size.x, size.y,
+		int(round(DisplayServer.screen_get_refresh_rate(screen))),
+		DisplayServer.screen_get_dpi(screen),
+	]
+
+
+## Which screen the saved choice is plugged into right now, -1 for none of them.
+##
+## An exact match is tried first. Failing that the position is dropped and the
+## panel is looked for by what it is alone, which is what survives a desktop the
+## player has rearranged since — the monitor is still there, it has just been
+## given a different corner to live in
+func _find_monitor(wanted: String) -> int:
+	if wanted.is_empty():
+		return -1
+
+	for screen in DisplayServer.get_screen_count():
+		if _fingerprint_of(screen) == wanted:
+			return screen
+
+	var panel := wanted.substr(wanted.find("|"))
+
+	for screen in DisplayServer.get_screen_count():
+		if _fingerprint_of(screen).ends_with(panel):
+			return screen
+
+	return -1
+
+
+## Turns the saved choice back into a screen number for this start. A choice that
+## is not plugged in falls back to the primary screen rather than to whatever
+## number happens to still be in range — clamping an index quietly lands the game
+## on a panel nobody asked for
+func _resolve_monitor() -> void:
+	var last := maxi(DisplayServer.get_screen_count() - 1, 0)
+
+	if _wanted_monitor.is_empty():
+		monitor = clampi(monitor, 0, last)
+		return
+
+	var found := _find_monitor(_wanted_monitor)
+	monitor = found if found >= 0 else DisplayServer.get_primary_screen()
 
 
 ## Names for the monitor dropdown, the resolution and the refresh rate are in
@@ -464,6 +545,7 @@ func save() -> void:
 	config.set_value("display", "resolution_x", resolution.x)
 	config.set_value("display", "resolution_y", resolution.y)
 	config.set_value("display", "monitor", monitor)
+	config.set_value("display", "monitor_id", _wanted_monitor)
 	config.set_value("display", "vsync", vsync)
 	config.set_value("display", "max_fps", max_fps)
 	config.set_value("graphics", "msaa", msaa)
@@ -505,6 +587,7 @@ func _load() -> void:
 		int(config.get_value("display", "resolution_y", resolution.y))
 	)
 	monitor = int(config.get_value("display", "monitor", monitor))
+	_wanted_monitor = String(config.get_value("display", "monitor_id", ""))
 	vsync = int(config.get_value("display", "vsync", vsync))
 	max_fps = int(config.get_value("display", "max_fps", max_fps))
 	msaa = int(config.get_value("graphics", "msaa", msaa))

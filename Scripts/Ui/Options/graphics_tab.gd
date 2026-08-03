@@ -363,9 +363,10 @@ func _on_splash_selected(index: int) -> void:
 	Settings.set_splash_quality(index)
 
 
+## Picking a screen here is the one thing that writes it down as the wanted one,
+## so that every other way the window gets moved leaves the choice alone
 func _on_monitor_selected(index: int) -> void:
-	Settings.monitor = index
-	Settings.apply_display()
+	Settings.set_monitor(index)
 
 
 func _on_window_mode_selected(index: int) -> void:

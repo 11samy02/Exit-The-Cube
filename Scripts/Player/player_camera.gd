@@ -131,7 +131,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		yaw -= event.relative.x * step
 		pitch -= event.relative.y * step
 		_apply_rotation()
-	elif event is InputEventMouseButton and event.pressed:
+	elif event is InputEventMouseButton and event.pressed and not Online.showing_results():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 

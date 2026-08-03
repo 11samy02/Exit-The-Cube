@@ -1,0 +1,887 @@
+extends Node
+
+## Everything multiplayer. One lobby over Steam, up to twelve cubes in it, and
+## a race through a maze every one of them builds for themselves out of the same
+## seed.
+##
+## Nothing here runs unless the player pressed ONLINE. The campaign never asks
+## this node anything, and the two calls the map scene makes into it both fall
+## straight back out again while no race is on, so a build with no Steam client,
+## no extension and no network plays exactly as it did before.
+##
+## The maze is not sent over the wire. Every machine builds the identical level
+## from the settings and the one seed the host rolled, which is what makes a
+## ninety six cell maze possible at all: the only traffic is a position per cube
+## per frame and a handful of counters
+
+## Steam came up, or did not. The online screen waits on this before it lets
+## anybody host
+signal steam_ready(ok: bool)
+
+## This machine is now in a lobby, whether it opened one or walked into one
+signal lobby_entered
+
+## The lobby is gone, with the line to show the player about why
+signal lobby_closed(reason: String)
+
+## Somebody joined, left, readied up, or the host moved a setting
+signal lobby_updated
+
+## The answer to a browser refresh, one dictionary per open lobby
+signal lobby_list_ready(lobbies: Array)
+
+## The host started the race, the map is being swapped in
+signal race_launched
+
+## A runner died, took a sphere, or made it out
+signal standings_updated
+
+const MAP_SCENE := "res://Scenes/Enviroment/map.tscn"
+const LOBBY_SCENE := "res://Scenes/Ui/lobby_screen.tscn"
+const TITLE_SCENE := "res://Scenes/Ui/title_screen.tscn"
+
+## The two nodes a race puts into the map. They are loaded by path when they are
+## needed rather than preloaded by name: both of them talk back to this autoload,
+## and naming them up here would be a circle neither script could compile out of
+const GHOST_FIELD := "res://Scripts/Online/ghost_field.gd"
+const RACE_OVERLAY := "res://Scripts/Ui/race_overlay.gd"
+
+
+## How many cubes fit in one maze
+const MAX_PLAYERS := 12
+
+## What the lobby browser filters on, so the list is this game and not every
+## lobby the app id ever opened
+const TAG_KEY := "game"
+const TAG_VALUE := "exit_the_cube"
+
+## The lobby is being set up, or a race is on. Everything else reads this off
+## the lobby data rather than being told, so a player who joined late is right
+const STATE_LOBBY := "lobby"
+const STATE_RACING := "racing"
+
+## Where this machine stands. RACING is the only one the map scene cares about
+enum Phase { OFFLINE, LOBBY, RACING }
+
+## A ghost position, sent unreliably and often
+const MSG_STATE := 1
+
+## The counters a ranking is built from, sent whenever one of them moves
+const MSG_PROGRESS := 2
+
+## One cube rode the elevator out
+const MSG_FINISH := 3
+
+## Sent to everybody on arrival so the other machines can open a session back
+const MSG_HELLO := 4
+
+## How often a cube tells the others where it is. Fifteen a second is enough for
+## a ghost the interpolation smooths anyway, and it keeps twelve players inside
+## a couple of kilobytes a second
+const STATE_RATE := 1.0 / 15.0
+
+## Seconds without a packet before a ghost is taken off the map. Long enough to
+## sit through a map rebuild after a death, which sends nothing at all
+const GHOST_TIMEOUT := 8.0
+
+var steam := SteamService.new()
+
+var phase: int = Phase.OFFLINE
+
+## The lobby this machine is in, 0 while it is in none
+var lobby_id: int = 0
+
+## True while this machine owns the lobby and decides the rules
+var is_host: bool = false
+
+## Mode, size, shape and difficulty, by their place in the RaceRules lists. The
+## host owns these, everybody else reads them off the lobby
+var settings: Dictionary = RaceRules.default_settings()
+
+## The number the whole lobby builds its maze from
+var race_seed: int = 0
+
+## Everybody in the lobby, in the order Steam lists them:
+## { "id": int, "name": String, "ready": bool, "host": bool }
+var members: Array[Dictionary] = []
+
+## Every cube in the race by its account, whether it is still on this machine's
+## screen or not. The ghosts are drawn off these and so is the ranking
+var runners: Dictionary = {}
+
+## The level the race is run on, built once when the race starts and kept over
+## every death, so the maze a player comes back into is the one they left
+var _level: MapData = null
+
+## True once the clock was put back to zero for this race. A death rebuilds the
+## map and would otherwise hand the runner a fresh start on the timer as well
+var _clock_zeroed: bool = false
+
+## Seconds until the next ghost packet goes out
+var _send_timer: float = 0.0
+
+## What was last sent about this cube, so a counter that has not moved does not
+## cost a reliable packet every tick
+var _sent_progress: Dictionary = {}
+
+## The lobby state this machine last acted on. Steam repeats a data update for
+## every key that changed, and the race must only be entered once
+var _acted_state: String = ""
+
+
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	set_process(false)
+	GameState.run_finished.connect(_on_run_finished)
+
+
+## Brings Steam up. This is deliberately not done at startup and it is worth
+## saying why, because doing it there is the obvious thing and it costs the
+## campaign.
+##
+## Bringing the API up loads Steam's overlay into the process, and the overlay
+## hooks the input APIs on its way in. On a build that was started outside Steam
+## that hook has been seen to swallow controller input entirely — the pad is
+## still enumerated and still reports its name, and nothing that is pressed on
+## it ever arrives. A player who never touches the online button should never be
+## anywhere near that, so the whole of Steam stays switched off until the online
+## screen asks for it.
+##
+## What it costs is an invite accepted while sitting on the title screen: there
+## is nothing listening for the callback yet. Pressing ONLINE first is a small
+## price for a campaign that plays the way it always did
+func connect_to_steam() -> bool:
+	if steam.running:
+		return true
+
+	var ok := steam.start()
+	if ok:
+		_listen()
+		set_process(true)
+
+	steam_ready.emit(ok)
+	return ok
+
+
+## Why online is not available, empty while it is
+func steam_error() -> String:
+	if not steam.available():
+		return "this build has no Steam support compiled in"
+
+	return steam.error
+
+
+func _listen() -> void:
+	steam.listen(&"lobby_created", _on_lobby_created)
+	steam.listen(&"lobby_joined", _on_lobby_joined)
+	steam.listen(&"lobby_chat_update", _on_lobby_chat_update)
+	steam.listen(&"lobby_data_update", _on_lobby_data_update)
+	steam.listen(&"lobby_match_list", _on_lobby_match_list)
+	steam.listen(&"join_requested", _on_join_requested)
+	steam.listen(&"p2p_session_request", _on_session_request)
+
+
+## Steamworks answers through callbacks and the packets pile up in a queue, both
+## of which have to be emptied by hand. The race traffic goes out on the same
+## beat, which is why this runs even while the tree is paused
+func _process(delta: float) -> void:
+	steam.poll()
+	_receive()
+
+	if phase != Phase.RACING:
+		return
+
+	_send_timer -= delta
+	if _send_timer <= 0.0:
+		_send_timer = STATE_RATE
+		_send_local_state()
+		_send_local_progress()
+
+	_drop_stale_ghosts()
+
+
+## Opens a lobby with this machine as its host
+func host_lobby() -> void:
+	if not steam.running:
+		return
+
+	settings = RaceRules.default_settings()
+	steam.create_lobby(MAX_PLAYERS)
+
+
+func join_lobby(lobby: int) -> void:
+	if steam.running:
+		steam.join_lobby(lobby)
+
+
+## Steps out of the lobby and closes every session it opened. A host leaving
+## hands the lobby to somebody else, Steam picks who
+func leave_lobby() -> void:
+	if lobby_id != 0:
+		for runner: int in runners:
+			steam.close_session(runner)
+
+		steam.leave_lobby(lobby_id)
+
+	_reset()
+	lobby_closed.emit("")
+
+
+## Asks Steam for every open lobby of this game, the answer comes back on
+## lobby_list_ready
+func refresh_lobbies() -> void:
+	if steam.running:
+		steam.request_lobbies(TAG_KEY, TAG_VALUE)
+
+
+## Opens the Steam overlay on this lobby's invite dialog, and says whether that
+## was possible at all.
+##
+## It only is when the game was started through Steam. Off the disk or out of the
+## editor there is no overlay in the process, and asking for one is a call that
+## returns quietly having done nothing — which is exactly what a button that
+## looks like it works and does not feels like. False means the caller has to
+## offer the list itself
+func invite_friends() -> bool:
+	if lobby_id == 0 or not steam.overlay_enabled():
+		return false
+
+	steam.invite_overlay(lobby_id)
+	return true
+
+
+## The friends list, for the panel the game puts up when there is no overlay to
+## hand the job to
+func friend_list() -> Array:
+	return steam.friends()
+
+
+## Sends that friend an invite to this lobby. It arrives as a Steam notification
+## and joins them straight in, the same as one sent from the overlay would
+func invite_friend(friend: int) -> void:
+	if lobby_id != 0:
+		steam.invite_to_lobby(lobby_id, friend)
+
+
+func in_lobby() -> bool:
+	return phase != Phase.OFFLINE and lobby_id != 0
+
+
+func is_racing() -> bool:
+	return phase == Phase.RACING
+
+
+## The level the race is run on. The map scene builds from this instead of from
+## the campaign while a race is on
+func level() -> MapData:
+	return _level
+
+
+## Marks this machine ready or not. The host has a start button instead and is
+## always counted as ready
+func set_ready(ready: bool) -> void:
+	if lobby_id == 0:
+		return
+
+	steam.set_member_data(lobby_id, "ready", "1" if ready else "0")
+	_refresh_members()
+
+
+func is_ready() -> bool:
+	for member in members:
+		if member["id"] == steam.id:
+			return bool(member["ready"])
+
+	return false
+
+
+## True once every cube in the lobby has readied up. The host is not asked, the
+## start button is the answer
+func everyone_ready() -> bool:
+	for member in members:
+		if not member["host"] and not member["ready"]:
+			return false
+
+	return true
+
+
+## Moves one of the four settings. Only the host may, everybody else reads them
+## back off the lobby a moment later
+func set_setting(key: String, value: int) -> void:
+	if not is_host or lobby_id == 0:
+		return
+
+	settings[key] = value
+	steam.set_lobby_data(lobby_id, key, str(value))
+	steam.set_lobby_data(lobby_id, "title", RaceRules.short_title_of(settings))
+	lobby_updated.emit()
+
+
+## Rolls the seed the whole lobby builds from and puts the lobby into the race.
+## Nothing is sent to anybody here: the state lands in the lobby data and every
+## machine, this one included, walks into the race off the update it gets back
+func start_race() -> void:
+	if not is_host or lobby_id == 0:
+		return
+
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+
+	steam.set_joinable(lobby_id, false)
+	steam.set_lobby_data(lobby_id, "seed", str(rng.randi_range(0, 0x7FFFFFF)))
+	steam.set_lobby_data(lobby_id, "state", STATE_RACING)
+	_read_lobby_data()
+	_follow_state()
+
+
+## Ends the race for the whole lobby and puts everybody back on the lobby screen
+func return_to_lobby() -> void:
+	if not is_host or lobby_id == 0:
+		return
+
+	steam.set_joinable(lobby_id, true)
+	steam.set_lobby_data(lobby_id, "state", STATE_LOBBY)
+	_follow_state()
+
+
+## Called by the map once it has finished building itself. This is where the
+## ghosts and the race panel are put into the scene, so the map scene itself
+## carries nothing online at all and still works opened on its own
+func attach_to_map(map: Node) -> void:
+	if not is_racing() or map == null:
+		return
+
+	map.add_child(_build(GHOST_FIELD))
+	map.add_child(_build(RACE_OVERLAY))
+	_zero_clock()
+
+
+## One of the two race nodes, built from its script. Every one of them knows
+## what it extends, so nothing here has to
+func _build(script_path: String) -> Node:
+	var script: GDScript = load(script_path)
+	var node: Node = script.new()
+	node.name = script_path.get_file().get_basename().to_pascal_case()
+	return node
+
+
+## The clock is put back to zero on the first frame after the maze was built,
+## not when the race was started. A gigantic map takes a moment to generate and
+## the machine that took longest must not start the race already behind.
+##
+## Only the first map of the race is timed from zero. The ones a death rebuilds
+## carry the time that has already been spent, that is what a death costs
+func _zero_clock() -> void:
+	if _clock_zeroed:
+		return
+
+	_clock_zeroed = true
+	await get_tree().process_frame
+	await get_tree().process_frame
+	GameState.run_time = 0.0
+	GameState.level_start_time = 0.0
+
+
+## The ranking. Fewest deaths first, then the fastest time, then the most
+## spheres — and a cube that matches another on all three shares its place, so
+## two identical runs are both first rather than one of them being second by the
+## order they happened to be listed in.
+##
+## Whoever is still in the maze is listed under everybody who made it out and
+## gets a place of their own down there, worked out from how the run is going
+## rather than from a time nobody has yet. That is what makes the board worth
+## looking at while the race is still on: a place that only appears at the end
+## is a scoreboard nobody can race against
+func standings() -> Array:
+	var done: Array = []
+	var running: Array = []
+
+	for id: int in runners:
+		var runner: Dictionary = runners[id].duplicate()
+		if bool(runner["finished"]):
+			done.append(runner)
+		else:
+			running.append(runner)
+
+	done.sort_custom(_is_ahead)
+	running.sort_custom(_is_leading)
+	_rank(done, 0, _is_ahead)
+	_rank(running, done.size(), _is_leading)
+
+	return done + running
+
+
+## How many cubes are out of the maze already
+func finisher_count() -> int:
+	var count := 0
+
+	for id: int in runners:
+		if bool(runners[id]["finished"]):
+			count += 1
+
+	return count
+
+
+## Where this machine stands on the board right now, 0 while it is in no race
+func local_rank() -> int:
+	for runner in standings():
+		if int(runner["id"]) == steam.id:
+			return int(runner["rank"])
+
+	return 0
+
+
+## True once this cube is out of the maze and the race panel has the screen. The
+## map is still running underneath it, so whatever would normally take the mouse
+## back off a menu has to ask first
+func showing_results() -> bool:
+	if not is_racing():
+		return false
+
+	var me: Dictionary = runners.get(steam.id, {})
+	return not me.is_empty() and bool(me["finished"])
+
+
+## True while somebody is still walking around in there, which is what makes
+## spectating worth offering
+func anyone_running() -> bool:
+	for id: int in runners:
+		if not bool(runners[id]["finished"]):
+			return true
+
+	return false
+
+
+## The one comparison the finished ranking is built on
+func _is_ahead(a: Dictionary, b: Dictionary) -> bool:
+	if int(a["deaths"]) != int(b["deaths"]):
+		return int(a["deaths"]) < int(b["deaths"])
+
+	if not is_equal_approx(float(a["time"]), float(b["time"])):
+		return float(a["time"]) < float(b["time"])
+
+	return int(a["items"]) > int(b["items"])
+
+
+## The same comparison for the cubes that are still in there, where the time is
+## the one number nobody has yet: a run only has a time once the elevator is at
+## the top. The key stands in for it — carrying it means the whole first half of
+## the maze is behind you, which is the only progress the others can be told
+## about without a packet on every corner
+func _is_leading(a: Dictionary, b: Dictionary) -> bool:
+	if bool(a["has_key"]) != bool(b["has_key"]):
+		return bool(a["has_key"])
+
+	if int(a["deaths"]) != int(b["deaths"]):
+		return int(a["deaths"]) < int(b["deaths"])
+
+	return int(a["items"]) > int(b["items"])
+
+
+## Walks the sorted list and hands out places, counting on from wherever the
+## group above it ended. Two runs that are level on every count the comparison
+## looks at get the same number, and the one after them skips the places they
+## took up, the way a podium with two golds has no silver
+func _rank(sorted: Array, from: int, comparison: Callable) -> void:
+	for at in range(sorted.size()):
+		var runner: Dictionary = sorted[at]
+		var above: Dictionary = sorted[at - 1] if at > 0 else {}
+		var level: bool = not above.is_empty() and not comparison.call(above, runner) \
+			and not comparison.call(runner, above)
+
+		runner["rank"] = int(above["rank"]) if level else from + at + 1
+
+
+func _on_lobby_created(result: int, lobby: int) -> void:
+	if result != 1:
+		lobby_closed.emit("the lobby would not open, Steam said no")
+		return
+
+	lobby_id = lobby
+	is_host = true
+	phase = Phase.LOBBY
+	_acted_state = STATE_LOBBY
+
+	steam.set_lobby_data(lobby, TAG_KEY, TAG_VALUE)
+	steam.set_lobby_data(lobby, "host", steam.persona(steam.id))
+	steam.set_lobby_data(lobby, "state", STATE_LOBBY)
+	steam.set_lobby_data(lobby, "title", RaceRules.short_title_of(settings))
+	steam.set_joinable(lobby, true)
+
+	for key: String in settings:
+		steam.set_lobby_data(lobby, key, str(settings[key]))
+
+	set_ready(true)
+	_refresh_members()
+	lobby_entered.emit()
+	_open_lobby_screen()
+
+
+func _on_lobby_joined(lobby: int, _permissions: int, _locked: bool, response: int) -> void:
+	if response != 1:
+		lobby_closed.emit("that lobby would not let you in")
+		return
+
+	lobby_id = lobby
+	phase = Phase.LOBBY
+	is_host = steam.lobby_owner(lobby) == steam.id
+	_acted_state = STATE_LOBBY
+
+	set_ready(false)
+	_read_lobby_data()
+	_refresh_members()
+	_greet_everyone()
+	lobby_entered.emit()
+	_open_lobby_screen()
+
+
+## Puts the lobby on screen from wherever the game happened to be. Being in a
+## lobby and looking at something else is not a state worth having, and it is
+## exactly what an invite accepted off the title screen would leave behind
+func _open_lobby_screen() -> void:
+	var scene := get_tree().current_scene
+	if scene == null or scene.scene_file_path != LOBBY_SCENE:
+		Transition.change_scene(LOBBY_SCENE)
+
+
+## Somebody came or went. Steam has already updated the member list by the time
+## this arrives, so it is simply read again
+func _on_lobby_chat_update(lobby: int, changed: int, _by: int, _state: int) -> void:
+	if lobby != lobby_id:
+		return
+
+	steam.close_session(changed)
+	is_host = steam.lobby_owner(lobby) == steam.id
+	_refresh_members()
+	lobby_updated.emit()
+
+
+func _on_lobby_data_update(_success: int, lobby: int, _member: int) -> void:
+	if lobby != lobby_id:
+		return
+
+	_read_lobby_data()
+	_refresh_members()
+	lobby_updated.emit()
+	_follow_state()
+
+
+## The host wrote a new state into the lobby and everybody, the host included,
+## acts on it here rather than on the button that caused it
+func _follow_state() -> void:
+	var state := steam.lobby_data(lobby_id, "state")
+	if state.is_empty() or state == _acted_state:
+		return
+
+	_acted_state = state
+
+	if state == STATE_RACING:
+		_enter_race()
+	else:
+		_leave_race()
+
+
+func _on_lobby_match_list(lobbies: Array) -> void:
+	var found: Array = []
+
+	for lobby: int in lobbies:
+		if steam.lobby_data(lobby, "state") != STATE_LOBBY:
+			continue
+
+		found.append({
+			"id": lobby,
+			"host": steam.lobby_data(lobby, "host"),
+			"title": steam.lobby_data(lobby, "title"),
+			"players": steam.member_count(lobby),
+		})
+
+	lobby_list_ready.emit(found)
+
+
+## A friend invited this machine through the Steam overlay
+func _on_join_requested(lobby: int, _friend: int) -> void:
+	if lobby_id != 0:
+		leave_lobby()
+
+	join_lobby(lobby)
+
+
+## Every session has to be agreed to by both sides. Only cubes that are actually
+## in this lobby are let through
+func _on_session_request(remote: int) -> void:
+	_refresh_members()
+
+	for member in members:
+		if member["id"] == remote:
+			steam.accept_session(remote)
+			return
+
+
+## The four settings, read back off the lobby. The host wrote them, so this is
+## also how the host's own copy is kept honest after a reconnect
+func _read_lobby_data() -> void:
+	for key: String in RaceRules.default_settings():
+		var value := steam.lobby_data(lobby_id, key)
+		if not value.is_empty():
+			settings[key] = int(value)
+
+	var seed_value := steam.lobby_data(lobby_id, "seed")
+	if not seed_value.is_empty():
+		race_seed = int(seed_value)
+
+
+## Rebuilds the member list off Steam. Names and ready flags both live there, so
+## nothing has to be sent between the machines while the lobby is open
+func _refresh_members() -> void:
+	members.clear()
+
+	if lobby_id == 0:
+		return
+
+	var owner := steam.lobby_owner(lobby_id)
+
+	for at in range(steam.member_count(lobby_id)):
+		var id := steam.member_at(lobby_id, at)
+		if id == 0:
+			continue
+
+		members.append({
+			"id": id,
+			"name": steam.persona(id),
+			"ready": steam.member_data(lobby_id, id, "ready") == "1" or id == owner,
+			"host": id == owner,
+		})
+
+
+## One packet to everybody the moment this machine arrives, so the sessions are
+## open before the first ghost position needs one
+func _greet_everyone() -> void:
+	_broadcast([MSG_HELLO], true)
+
+
+func _enter_race() -> void:
+	if phase == Phase.RACING:
+		return
+
+	phase = Phase.RACING
+	_level = RaceRules.build_level(settings, race_seed)
+	_clock_zeroed = false
+	_send_timer = 0.0
+	_sent_progress.clear()
+	_build_runners()
+
+	Levels.stop()
+	GameState.is_running = false
+	GameState.start_run()
+	Quips.say_next(Quips.pick("online_race_start", OnlineQuips.RACE_START))
+
+	race_launched.emit()
+	Transition.change_scene(MAP_SCENE)
+
+
+func _leave_race() -> void:
+	if phase != Phase.RACING:
+		return
+
+	phase = Phase.LOBBY
+	_level = null
+	runners.clear()
+	set_ready(is_host)
+	GameState.is_running = false
+	Transition.change_scene(LOBBY_SCENE)
+
+
+## One runner per cube in the lobby, all of them on zero. A ghost is only drawn
+## once a position has arrived for it, so a player whose map takes longer to
+## build does not flicker into the corner of the maze first
+func _build_runners() -> void:
+	runners.clear()
+
+	for member in members:
+		runners[member["id"]] = {
+			"id": member["id"],
+			"name": member["name"],
+			"deaths": 0,
+			"items": 0,
+			"has_key": false,
+			"finished": false,
+			"time": 0.0,
+			"dead": false,
+			"placed": false,
+			"position": Vector3.ZERO,
+			"target": Vector3.ZERO,
+			"yaw": 0.0,
+			"target_yaw": 0.0,
+			"seen_at": _now(),
+		}
+
+
+## Where this cube is, sent to everybody else. The player is looked up rather
+## than handed in, so a map that is between two rebuilds simply sends nothing
+func _send_local_state() -> void:
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null:
+		return
+
+	var death := get_tree().get_first_node_in_group("player_death") as PlayerDeath
+	var dead := death != null and death.is_dead
+	var yaw := 0.0
+
+	var mesh := player.get_node_or_null("mesh") as Node3D
+	if mesh != null:
+		yaw = mesh.global_rotation.y
+
+	_remember_local({"position": player.global_position, "yaw": yaw, "dead": dead})
+	_broadcast([MSG_STATE, player.global_position, yaw, dead], false)
+
+
+## The counters, sent only when one of them actually moved
+func _send_local_progress() -> void:
+	var progress := {
+		"deaths": GameState.deaths,
+		"items": GameState.items_collected,
+		"has_key": GameState.has_key,
+	}
+
+	_remember_local(progress)
+
+	if progress == _sent_progress:
+		return
+
+	_sent_progress = progress.duplicate()
+	_broadcast([MSG_PROGRESS, progress["deaths"], progress["items"], progress["has_key"]], true)
+	standings_updated.emit()
+
+
+## Writes something into this machine's own runner. The local cube is not drawn
+## as a ghost, but it is ranked alongside every other one
+func _remember_local(values: Dictionary) -> void:
+	var runner: Dictionary = runners.get(steam.id, {})
+	if runner.is_empty():
+		return
+
+	for key: String in values:
+		runner[key] = values[key]
+
+	runner["seen_at"] = _now()
+
+
+func _broadcast(message: Array, reliable: bool) -> void:
+	var payload := var_to_bytes(message)
+
+	for member in members:
+		if member["id"] != steam.id:
+			steam.send(member["id"], payload, reliable)
+
+
+## Empties the packet queue. Anything malformed or from an account that is not
+## in this lobby is dropped without a word
+func _receive() -> void:
+	for packet: Dictionary in steam.receive():
+		var sender := int(packet.get("steam_id_remote", 0))
+		if not runners.has(sender):
+			continue
+
+		var message: Variant = bytes_to_var(packet.get("data", PackedByteArray()))
+		if typeof(message) != TYPE_ARRAY or (message as Array).is_empty():
+			continue
+
+		_handle(sender, message as Array)
+
+
+func _handle(sender: int, message: Array) -> void:
+	var runner: Dictionary = runners[sender]
+	runner["seen_at"] = _now()
+
+	match int(message[0]):
+		MSG_STATE:
+			_handle_state(runner, message)
+		MSG_PROGRESS:
+			_handle_progress(runner, message)
+		MSG_FINISH:
+			_handle_finish(runner, message)
+
+
+## A ghost is moved to where the packet says over the next frames rather than
+## snapped there. The first packet is the exception, there is nothing to come
+## from yet and the cube would otherwise slide in from the middle of the map
+func _handle_state(runner: Dictionary, message: Array) -> void:
+	if message.size() < 4:
+		return
+
+	runner["target"] = message[1] as Vector3
+	runner["target_yaw"] = float(message[2])
+	runner["dead"] = bool(message[3])
+
+	if not bool(runner["placed"]):
+		runner["placed"] = true
+		runner["position"] = runner["target"]
+		runner["yaw"] = runner["target_yaw"]
+
+
+func _handle_progress(runner: Dictionary, message: Array) -> void:
+	if message.size() < 4:
+		return
+
+	runner["deaths"] = int(message[1])
+	runner["items"] = int(message[2])
+	runner["has_key"] = bool(message[3])
+	standings_updated.emit()
+
+
+func _handle_finish(runner: Dictionary, message: Array) -> void:
+	if message.size() < 5:
+		return
+
+	runner["finished"] = true
+	runner["time"] = float(message[1])
+	runner["deaths"] = int(message[2])
+	runner["items"] = int(message[3])
+	runner["has_key"] = true
+	runner["dead"] = false
+	standings_updated.emit()
+
+
+## A cube that has said nothing for a while is off the map. Its ranking stays,
+## only the ghost goes: a player who alt tabbed into a crash should not keep
+## sliding along the last corridor they were seen in
+func _drop_stale_ghosts() -> void:
+	var now := _now()
+
+	for id: int in runners:
+		var runner: Dictionary = runners[id]
+		if bool(runner["placed"]) and now - float(runner["seen_at"]) > GHOST_TIMEOUT:
+			runner["placed"] = false
+
+
+## The elevator carried this cube out. The summary panel stays down in a race,
+## the standings take its place
+func _on_run_finished() -> void:
+	if not is_racing():
+		return
+
+	_remember_local({
+		"finished": true,
+		"time": GameState.run_time,
+		"deaths": GameState.deaths,
+		"items": GameState.items_collected,
+	})
+
+	_broadcast([MSG_FINISH, GameState.run_time, GameState.deaths, GameState.items_collected], true)
+	standings_updated.emit()
+
+
+func _reset() -> void:
+	phase = Phase.OFFLINE
+	lobby_id = 0
+	is_host = false
+	race_seed = 0
+	_level = null
+	_acted_state = ""
+	members.clear()
+	runners.clear()
+	_sent_progress.clear()
+
+
+func _now() -> float:
+	return float(Time.get_ticks_msec()) * 0.001

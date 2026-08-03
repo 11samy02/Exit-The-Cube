@@ -21,11 +21,6 @@ const ENTRIES := [
 	["ENGINE", "Godot Engine 4.7"],
 ]
 
-## Every game ships with a list of known issues. This one knows where they come
-## from, and the line is the last thing the panel puts up for that reason
-const BUG_KEY := "KNOWN BUGS"
-const BUG_LINE := "nah its not a bug, its actually only me"
-
 ## How wide the left column is. Every entry is read as a pair, so the values
 ## have to start on the same pixel or the panel reads as a heap of text
 const KEY_WIDTH := 380.0
@@ -42,9 +37,6 @@ const ROW_FONT_SIZE := 25
 
 ## How far a row comes in from the left
 @export var row_slide: float = 40.0
-
-## The color the bug line is written in, it is the punchline and not an entry
-@export var bug_color: Color = Color(1, 0.35, 0.55)
 
 @onready var _list: VBoxContainer = %List
 @onready var _back_button: Button = %BackButton
@@ -93,9 +85,9 @@ func close() -> void:
 	closed.emit()
 
 
-## One row per entry plus the bug line under them. Built in code because the
-## rows are all the same shape and a scene full of copies of it would only be
-## another place to keep the list in step with itself
+## One row per entry. Built in code because the rows are all the same shape and
+## a scene full of copies of it would only be another place to keep the list in
+## step with itself
 func _build_rows() -> void:
 	for child in _list.get_children():
 		_list.remove_child(child)
@@ -105,13 +97,6 @@ func _build_rows() -> void:
 
 	for entry in ENTRIES:
 		_rows.append(_build_row(String(entry[0]), String(entry[1]), Color.WHITE))
-
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 18)
-	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_list.add_child(spacer)
-
-	_rows.append(_build_row(BUG_KEY, BUG_LINE, bug_color))
 
 
 ## A row is the pair it shows: the key right aligned against the column, the
