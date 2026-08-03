@@ -49,12 +49,6 @@ const BEATS := [
 ## so it arrives instead of simply being there
 @export var pop_scale: float = 1.16
 
-## How far the logo is thrown sideways by the glitch it leaves on
-@export var glitch_throw: float = 13.0
-
-## Seconds one frame of that glitch takes
-@export var glitch_step: float = 0.04
-
 @onready var _stack: VBoxContainer = %Stack
 @onready var _logo: TextureRect = %Logo
 @onready var _line: Label = %Line
@@ -96,8 +90,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_skip_sequence()
 
 
-## One tween carries the whole thing: every beat comes up, stands, glitches once
-## and leaves, and the screen goes black behind the last one
+## One tween carries the whole thing: every beat comes up, stands and leaves,
+## and the screen goes black behind the last one
 func _play() -> void:
 	_sequence = create_tween()
 	_sequence.tween_property(_blackout, "color:a", 0.0, boot_fade)
@@ -122,15 +116,11 @@ func _queue_beat(beat: Dictionary) -> void:
 	_sequence.tween_callback(_show_beat.bind(beat))
 	_sequence.tween_property(_stack, "modulate:a", 1.0, fade_in)
 	_sequence.parallel().tween_property(_logo, "offset_transform_scale", Vector2.ONE, fade_in) \
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	_sequence.parallel().tween_property(_line, "modulate:a", 1.0, fade_in) \
 		.set_delay(fade_in * 0.3)
 
 	_sequence.tween_interval(hold)
-
-	_sequence.tween_property(_logo, "offset_transform_position", Vector2(-glitch_throw, 0), glitch_step)
-	_sequence.tween_property(_logo, "offset_transform_position", Vector2(glitch_throw * 0.7, 0), glitch_step)
-	_sequence.tween_property(_logo, "offset_transform_position", Vector2.ZERO, glitch_step)
 	_sequence.tween_property(_stack, "modulate:a", 0.0, fade_out)
 
 

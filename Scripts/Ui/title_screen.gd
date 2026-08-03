@@ -99,7 +99,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## The title switches itself on like an old tube: a flat line that snaps open,
-## the letters typed into it, then one glitch and a flash before it settles
+## the letters typed into it, then one flash as it settles
 func _play_intro() -> void:
 	_prepare_intro()
 
@@ -113,24 +113,18 @@ func _play_intro() -> void:
 	_intro.tween_property(_title, "visible_ratio", 1.0, type_duration) \
 		.set_delay(0.22).set_trans(Tween.TRANS_LINEAR)
 
-	var glitch_at := 0.22 + type_duration
-	_intro.tween_property(_title, "offset_transform_position", Vector2(-14, 0), 0.04) \
-		.set_delay(glitch_at)
-	_intro.tween_property(_title, "offset_transform_position", Vector2(10, 0), 0.04) \
-		.set_delay(glitch_at + 0.04)
-	_intro.tween_property(_title, "offset_transform_position", Vector2.ZERO, 0.06) \
-		.set_delay(glitch_at + 0.08)
-	_intro.tween_property(_title, "modulate", Color(2.4, 2.4, 2.6, 1), 0.05) \
-		.set_delay(glitch_at + 0.08)
-	_intro.tween_property(_title, "modulate", Color(1, 1, 1, 1), 0.35) \
-		.set_delay(glitch_at + 0.13)
+	var typed_at := 0.22 + type_duration
+	_intro.tween_property(_title, "modulate", Color(2.4, 2.4, 2.6, 1), 0.08) \
+		.set_delay(typed_at)
+	_intro.tween_property(_title, "modulate", Color(1, 1, 1, 1), 0.4) \
+		.set_delay(typed_at + 0.08)
 
 	_intro.tween_property(_subtitle, "modulate", Color(1, 1, 1, 1), 0.4) \
-		.set_delay(glitch_at + 0.1)
+		.set_delay(typed_at + 0.1)
 
 	for i in _buttons.size():
 		var button: Control = _buttons[i]
-		var at := glitch_at + 0.25 + i * 0.09
+		var at := typed_at + 0.25 + i * 0.09
 		_intro.tween_property(button, "modulate", Color(1, 1, 1, 1), 0.25).set_delay(at)
 		_intro.tween_property(button, "offset_transform_position", Vector2.ZERO, 0.35) \
 			.set_delay(at).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
