@@ -1,0 +1,161 @@
+[gd_scene load_steps=17 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Enviroment/saw_explosion.gd" id="1_boom"]
+[ext_resource type="AudioStream" uid="uid://dluia2wvf3qli" path="res://Assets/Sounds/UI & Menus/Error.wav" id="2_sound"]
+
+[sub_resource type="Curve" id="Curve_shrink"]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(0.7, 0.9), 0.0, 0.0, 0, 0, Vector2(1, 0), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="CurveTexture" id="CurveTexture_shrink"]
+curve = SubResource("Curve_shrink")
+
+[sub_resource type="Curve" id="Curve_swell"]
+_data = [Vector2(0, 0.35), 0.0, 0.0, 0, 0, Vector2(0.45, 1), 0.0, 0.0, 0, 0, Vector2(1, 0.6), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="CurveTexture" id="CurveTexture_swell"]
+curve = SubResource("Curve_swell")
+
+[sub_resource type="Gradient" id="Gradient_smoke"]
+offsets = PackedFloat32Array(0, 0.25, 1)
+colors = PackedColorArray(0.35, 0.3, 0.34, 0.55, 0.18, 0.16, 0.2, 0.35, 0.05, 0.04, 0.06, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_smoke"]
+gradient = SubResource("Gradient_smoke")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_chunks"]
+lifetime_randomness = 0.4
+emission_shape = 1
+emission_sphere_radius = 0.35
+angle_min = -180.0
+angle_max = 180.0
+spread = 180.0
+initial_velocity_min = 3.0
+initial_velocity_max = 9.0
+angular_velocity_min = -900.0
+angular_velocity_max = 900.0
+gravity = Vector3(0, -16, 0)
+damping_min = 0.3
+damping_max = 1.4
+scale_min = 0.4
+scale_max = 1.4
+scale_curve = SubResource("CurveTexture_shrink")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_chunks"]
+albedo_color = Color(1, 0.35, 0.12, 1)
+metallic = 0.4
+roughness = 0.45
+emission_enabled = true
+emission = Color(1, 0.3, 0.08, 1)
+emission_energy_multiplier = 2.2
+
+[sub_resource type="BoxMesh" id="BoxMesh_chunks"]
+material = SubResource("StandardMaterial3D_chunks")
+size = Vector3(0.18, 0.18, 0.18)
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_sparks"]
+lifetime_randomness = 0.5
+emission_shape = 1
+emission_sphere_radius = 0.2
+spread = 180.0
+initial_velocity_min = 8.0
+initial_velocity_max = 18.0
+gravity = Vector3(0, -22, 0)
+damping_min = 1.0
+damping_max = 4.0
+scale_min = 0.3
+scale_max = 1.0
+scale_curve = SubResource("CurveTexture_shrink")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sparks"]
+albedo_color = Color(1, 0.85, 0.4, 1)
+shading_mode = 0
+emission_enabled = true
+emission = Color(1, 0.8, 0.35, 1)
+emission_energy_multiplier = 6.0
+
+[sub_resource type="BoxMesh" id="BoxMesh_sparks"]
+material = SubResource("StandardMaterial3D_sparks")
+size = Vector3(0.06, 0.06, 0.06)
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_smoke"]
+lifetime_randomness = 0.5
+emission_shape = 1
+emission_sphere_radius = 0.5
+angle_min = -180.0
+angle_max = 180.0
+spread = 180.0
+initial_velocity_min = 0.6
+initial_velocity_max = 2.6
+angular_velocity_min = -90.0
+angular_velocity_max = 90.0
+gravity = Vector3(0, 0.9, 0)
+damping_min = 0.8
+damping_max = 2.0
+scale_min = 1.2
+scale_max = 3.4
+scale_curve = SubResource("CurveTexture_swell")
+color_ramp = SubResource("GradientTexture1D_smoke")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_smoke"]
+transparency = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.22, 0.2, 0.24, 0.5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_smoke"]
+material = SubResource("StandardMaterial3D_smoke")
+size = Vector3(0.35, 0.35, 0.35)
+
+[node name="SawExplosion" type="Node3D" node_paths=PackedStringArray("chunks", "sparks", "smoke", "flash", "sound")]
+script = ExtResource("1_boom")
+chunks = NodePath("Chunks")
+sparks = NodePath("Sparks")
+smoke = NodePath("Smoke")
+flash = NodePath("Flash")
+sound = NodePath("Sound")
+
+[node name="Chunks" type="GPUParticles3D" parent="."]
+emitting = false
+amount = 90
+lifetime = 1.6
+one_shot = true
+explosiveness = 1.0
+randomness = 0.4
+visibility_aabb = AABB(-14, -14, -14, 28, 28, 28)
+process_material = SubResource("ParticleProcessMaterial_chunks")
+draw_pass_1 = SubResource("BoxMesh_chunks")
+
+[node name="Sparks" type="GPUParticles3D" parent="."]
+emitting = false
+amount = 140
+lifetime = 0.7
+one_shot = true
+explosiveness = 1.0
+randomness = 0.5
+visibility_aabb = AABB(-14, -14, -14, 28, 28, 28)
+process_material = SubResource("ParticleProcessMaterial_sparks")
+draw_pass_1 = SubResource("BoxMesh_sparks")
+
+[node name="Smoke" type="GPUParticles3D" parent="."]
+emitting = false
+amount = 60
+lifetime = 2.8
+one_shot = true
+explosiveness = 0.85
+randomness = 0.5
+visibility_aabb = AABB(-10, -10, -10, 20, 20, 20)
+process_material = SubResource("ParticleProcessMaterial_smoke")
+draw_pass_1 = SubResource("BoxMesh_smoke")
+
+[node name="Flash" type="OmniLight3D" parent="."]
+light_color = Color(1, 0.55, 0.25, 1)
+light_energy = 0.0
+omni_range = 10.0
+
+[node name="Sound" type="AudioStreamPlayer3D" parent="."]
+stream = ExtResource("2_sound")
+unit_size = 14.0
+pitch_scale = 0.6
+bus = &"sfx"

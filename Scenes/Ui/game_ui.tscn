@@ -1,0 +1,232 @@
+[gd_scene format=3 uid="uid://kp1t38lc0s37"]
+
+[ext_resource type="Texture2D" uid="uid://cf072yv3n1mit" path="res://Assets/Ui/key_icon.svg" id="1_5gagt"]
+[ext_resource type="Script" uid="uid://51s6qs6bmrnj" path="res://Scripts/Ui/game_ui.gd" id="2_ui"]
+[ext_resource type="Texture2D" uid="uid://batqcw52qts87" path="res://Assets/Ui/Sprite-0001.png" id="3_28piy"]
+[ext_resource type="Texture2D" uid="uid://bfwekktxaofyp" path="res://Assets/Ui/Pfeil.svg" id="5_4wov7"]
+[ext_resource type="Script" uid="uid://dvekdw71nj7og" path="res://Scripts/Ui/item_slot.gd" id="6_slot"]
+[ext_resource type="FontFile" uid="uid://hx07oyjr0bm1" path="res://Assets/Fonts/Orbitron-Variable.ttf" id="7_orbitron"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_c3ncp"]
+font_size = 30
+font_color = Color(0, 0, 0, 1)
+shadow_size = 4
+shadow_color = Color(0.91460645, 4.7168137e-06, 9.62615e-07, 0.54509807)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_8mw0m"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_hint"]
+font_size = 22
+font_color = Color(0.85, 0.8, 1, 0.85)
+shadow_size = 3
+shadow_color = Color(0, 0, 0, 0.6)
+
+[sub_resource type="FontVariation" id="FontVariation_banner"]
+base_font = ExtResource("7_orbitron")
+variation_opentype = {
+2003265652: 800
+}
+spacing_glyph = 6
+
+[sub_resource type="LabelSettings" id="LabelSettings_banner"]
+font = SubResource("FontVariation_banner")
+font_size = 34
+font_color = Color(1, 1, 1, 1)
+outline_size = 5
+outline_color = Color(0.353, 0.125, 0.851, 0.75)
+shadow_size = 14
+shadow_color = Color(0.051, 0.749, 1, 0.4)
+
+[sub_resource type="LabelSettings" id="LabelSettings_lesson"]
+font_size = 26
+font_color = Color(0.129, 0.855, 1, 1)
+shadow_size = 8
+shadow_color = Color(0, 0, 0, 0.7)
+
+[sub_resource type="LabelSettings" id="LabelSettings_subtitle"]
+font_size = 24
+font_color = Color(0.92, 0.9, 1, 1)
+outline_size = 6
+outline_color = Color(0, 0, 0, 0.85)
+shadow_size = 10
+shadow_color = Color(0, 0, 0, 0.55)
+
+[node name="Game UI" type="CanvasLayer" unique_id=408468231]
+script = ExtResource("2_ui")
+
+[node name="Control" type="Control" parent="." unique_id=64882095]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="subtitle" type="Label" parent="Control"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 260.0
+offset_top = -280.0
+offset_right = -260.0
+offset_bottom = -180.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+label_settings = SubResource("LabelSettings_subtitle")
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="Control" unique_id=446647304]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 50
+theme_override_constants/margin_top = 50
+theme_override_constants/margin_right = 50
+theme_override_constants/margin_bottom = 50
+
+[node name="key_icon" type="TextureRect" parent="Control/MarginContainer" unique_id=331320827]
+custom_minimum_size = Vector2(100, 100)
+layout_mode = 2
+size_flags_horizontal = 8
+size_flags_vertical = 8
+mouse_filter = 2
+texture = ExtResource("1_5gagt")
+expand_mode = 3
+stretch_mode = 5
+
+[node name="death_icon" type="TextureRect" parent="Control/MarginContainer" unique_id=670304054]
+custom_minimum_size = Vector2(150, 150)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 8
+texture = ExtResource("3_28piy")
+expand_mode = 5
+stretch_mode = 5
+
+[node name="death_count" type="Label" parent="Control/MarginContainer/death_icon" unique_id=893566077]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -25.5
+offset_top = -46.0
+offset_right = 25.5
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "999"
+label_settings = SubResource("LabelSettings_c3ncp")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="banner" type="VBoxContainer" parent="Control/MarginContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 8
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="level_name" type="Label" parent="Control/MarginContainer/banner"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "LEVEL 1"
+label_settings = SubResource("LabelSettings_banner")
+horizontal_alignment = 1
+
+[node name="lesson" type="HBoxContainer" parent="Control/MarginContainer/banner"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 2
+theme_override_constants/separation = 14
+
+[node name="lesson_icon" type="TextureRect" parent="Control/MarginContainer/banner/lesson"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(52, 52)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="lesson_text" type="Label" parent="Control/MarginContainer/banner/lesson"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+text = "SWITCH PERSPECTIVE"
+label_settings = SubResource("LabelSettings_lesson")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="item_box" type="Panel" parent="Control/MarginContainer" unique_id=1294873612 node_paths=PackedStringArray("icon", "hint", "use_icon")]
+custom_minimum_size = Vector2(150, 150)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_8mw0m")
+script = ExtResource("6_slot")
+icon = NodePath("item icon")
+hint = NodePath("use_hint")
+use_icon = NodePath("use_icon")
+
+[node name="item icon" type="TextureRect" parent="Control/MarginContainer/item_box" unique_id=1108025603]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+offset_transform_enabled = true
+offset_transform_scale = Vector2(0.5, 0.5)
+mouse_filter = 2
+texture = ExtResource("5_4wov7")
+expand_mode = 1
+
+[node name="use_hint" type="Label" parent="Control/MarginContainer/item_box" unique_id=1108025604]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -6.0
+offset_bottom = 28.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "F"
+label_settings = SubResource("LabelSettings_hint")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="use_icon" type="TextureRect" parent="Control/MarginContainer/item_box"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -14.0
+offset_bottom = 44.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5

@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" uid="uid://c5r0kdhebd8lu" path="res://Scripts/Enviroment/map_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "LEVEL 5"
+world_seed = -1
+shape = 1
+radius = 6
+openness = 0.416
+ground_item_index = 1
+wall_item_index = 1
+roof_item_index = 1
+player_spawn_point_count = 1
+key_spawn_point_count = 3
+key_min_distance_to_player = 5
+elevator_min_distance_to_key = 4
+elevator_min_distance_to_player = 6
+elevator_spawn_point_count = 3
+saw_count = 2
+saw_min_patrol_length = 2
+saw_max_patrol_length = 5
+saw_min_speed = 3.24
+saw_max_speed = 4.32
+saw_route_spacing = 2
+ai_saw_count = 0
+item_pool = Array[String](["arrow", "echo", "freeze", "rush", "saw_paths", "shield", "speed"])
+item_count = 3
+item_min_distance = 3
+item_min_distance_to_player = 2
+map_seed = 1065
+key_spawn_seed = 1066
+saw_spawn_seed = 1067
+elevator_spawn_seed = 1068
+item_spawn_seed = 1069
+player_spawn_seed = 1070
+glass_wall_seed = 1071
+metadata/_custom_type_script = "uid://c5r0kdhebd8lu"

@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Audio/game_music.gd" id="1_music"]
+[ext_resource type="AudioStream" uid="uid://cyngj114y02si" path="res://Assets/Sounds/music/OutOfTheOrbit.mp3" id="2_bed"]
+
+[node name="Music" type="Node" node_paths=PackedStringArray("bed", "overlay")]
+script = ExtResource("1_music")
+game_track = ExtResource("2_bed")
+bed = NodePath("Bed")
+overlay = NodePath("Overlay")
+
+[node name="Bed" type="AudioStreamPlayer" parent="."]
+volume_db = -80.0
+bus = &"music"
+
+[node name="Overlay" type="AudioStreamPlayer" parent="."]
+volume_db = -80.0
+bus = &"music"

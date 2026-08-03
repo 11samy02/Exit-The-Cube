@@ -1,0 +1,101 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Ui/credits.gd" id="1_credits"]
+[ext_resource type="FontFile" uid="uid://hx07oyjr0bm1" path="res://Assets/Fonts/Orbitron-Variable.ttf" id="2_orbitron"]
+[ext_resource type="FontFile" uid="uid://y8peg4x6b6cg" path="res://Assets/Fonts/Rajdhani-Medium.ttf" id="3_body"]
+[ext_resource type="Texture2D" uid="uid://byb4seqk4g81h" path="res://Assets/Logos/logo.svg" id="4_logo"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_heading"]
+font = ExtResource("2_orbitron")
+font_size = 38
+outline_size = 6
+outline_color = Color(0.353, 0.125, 0.851, 0.85)
+
+[sub_resource type="LabelSettings" id="LabelSettings_footer"]
+font = ExtResource("3_body")
+font_size = 22
+font_color = Color(0.58, 0.55, 0.72, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.028, 0.016, 0.065, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.353, 0.125, 0.851, 0.8)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+content_margin_left = 66.0
+content_margin_top = 34.0
+content_margin_right = 66.0
+content_margin_bottom = 34.0
+
+[node name="Credits" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_credits")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Column" type="VBoxContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 22
+
+[node name="Logo" type="TextureRect" parent="Center/Panel/Column"]
+custom_minimum_size = Vector2(0, 96)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("4_logo")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Title" type="Label" parent="Center/Panel/Column"]
+layout_mode = 2
+text = "CREDITS"
+label_settings = SubResource("LabelSettings_heading")
+horizontal_alignment = 1
+
+[node name="List" type="VBoxContainer" parent="Center/Panel/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Footer" type="Label" parent="Center/Panel/Column"]
+layout_mode = 2
+text = "THANKS FOR PLAYING"
+label_settings = SubResource("LabelSettings_footer")
+horizontal_alignment = 1
+
+[node name="BackButton" type="Button" parent="Center/Panel/Column"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 64)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "BACK"

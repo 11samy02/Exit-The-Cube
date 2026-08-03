@@ -1,0 +1,207 @@
+[gd_scene format=3 uid="uid://dud8e0sc0b03h"]
+
+[ext_resource type="MeshLibrary" uid="uid://b0sss60mg1tcn" path="res://Assets/Libary/Map.meshlib" id="1_mav4t"]
+[ext_resource type="Script" uid="uid://db2afgpefbe4e" path="res://Scripts/Enviroment/map.gd" id="2_t2ufs"]
+[ext_resource type="Script" uid="uid://15vutkggary2" path="res://Scripts/Enviroment/map_generator.gd" id="2_tyaxe"]
+[ext_resource type="Resource" uid="uid://cy44xufbsvakh" path="res://Resources/Maps/DemoLevel.tres" id="3_mm1cd"]
+[ext_resource type="Script" uid="uid://dksohya3k48ho" path="res://Scripts/Enviroment/key_spawner.gd" id="4_t2j20"]
+[ext_resource type="PackedScene" uid="uid://phcub8ytccyg" path="res://Scenes/Enviroment/key.tscn" id="5_0tvdd"]
+[ext_resource type="Script" uid="uid://3j5atgo30bf3" path="res://Scripts/Enviroment/saw_spawner.gd" id="6_wsdu4"]
+[ext_resource type="PackedScene" uid="uid://b0gdjrppg2c8b" path="res://Scenes/Enviroment/saw.tscn" id="7_iuuh5"]
+[ext_resource type="PackedScene" uid="uid://b2174jvubps6h" path="res://Scenes/Enviroment/saw_ai.tscn" id="7_sawai"]
+[ext_resource type="Script" uid="uid://d4cq1jq1gfl35" path="res://Scripts/Enviroment/elevator_spawner.gd" id="8_4x5vj"]
+[ext_resource type="PackedScene" uid="uid://dfw86yajxb7ki" path="res://Scenes/Enviroment/elevator.tscn" id="9_tnm3o"]
+[ext_resource type="Script" uid="uid://d1eg7ksfonfli" path="res://Scripts/Enviroment/item_spawner.gd" id="10_tnm3o"]
+[ext_resource type="PackedScene" uid="uid://ll7lpfmbj27t" path="res://Scenes/Enviroment/item_sphere.tscn" id="11_trlax"]
+[ext_resource type="Script" uid="uid://d1isdgyutrfqg" path="res://Scripts/Enviroment/player_spawner.gd" id="12_1c076"]
+[ext_resource type="Script" uid="uid://caddeypctuwor" path="res://Scripts/Enviroment/blood_spawner.gd" id="13_blood"]
+[ext_resource type="Script" uid="uid://bgroslujfiu7w" path="res://Scripts/Enviroment/glass_wall_spawner.gd" id="13_glassp"]
+[ext_resource type="PackedScene" path="res://Scenes/Enviroment/glass_wall.tscn" id="13_glassw"]
+[ext_resource type="Shader" uid="uid://ex7i2c87q8xm" path="res://Assets/shaders/DeathInk.gdshader" id="13_ink"]
+[ext_resource type="PackedScene" uid="uid://cpqlswhjedfr1" path="res://Scenes/Player/player.tscn" id="13_pl4yr"]
+[ext_resource type="PackedScene" uid="uid://kp1t38lc0s37" path="res://Scenes/Ui/game_ui.tscn" id="14_gmui"]
+[ext_resource type="PackedScene" path="res://Scenes/Ui/pause_menu.tscn" id="15_pause"]
+[ext_resource type="PackedScene" path="res://Scenes/Ui/run_summary.tscn" id="16_summary"]
+[ext_resource type="Shader" uid="uid://qg165vmnva1e" path="res://Assets/shaders/Footprint.gdshader" id="17_print"]
+[ext_resource type="Script" uid="uid://d1apkovcw6qht" path="res://Scripts/Enviroment/footprints.gd" id="17_steps"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_jcfw8"]
+sky_top_color = Color(0.007, 0, 0.02, 1)
+sky_horizon_color = Color(0.06, 0.004, 0.13, 1)
+sky_curve = 0.08
+sky_cover_modulate = Color(0, 0, 0, 1)
+ground_bottom_color = Color(0, 0, 0, 1)
+ground_horizon_color = Color(0.04, 0.002, 0.09, 1)
+ground_curve = 0.05
+
+[sub_resource type="Sky" id="Sky_c3ncp"]
+sky_material = SubResource("ProceduralSkyMaterial_jcfw8")
+
+[sub_resource type="Environment" id="Environment_c3ncp"]
+background_mode = 2
+sky = SubResource("Sky_c3ncp")
+ambient_light_source = 2
+ambient_light_color = Color(0.32, 0.12, 0.62, 1)
+ambient_light_energy = 0.55
+tonemap_mode = 3
+tonemap_exposure = 1.05
+tonemap_white = 4.0
+ssao_enabled = true
+ssao_radius = 1.4
+ssao_intensity = 2.5
+ssao_power = 1.8
+ssao_light_affect = 0.2
+glow_levels/1 = 1.0
+glow_levels/2 = 0.7
+glow_levels/3 = 0.35
+glow_normalized = true
+glow_intensity = 0.8
+glow_hdr_threshold = 1.2
+glow_hdr_scale = 1.0
+glow_hdr_luminance_cap = 3.0
+fog_enabled = true
+fog_light_color = Color(0.22, 0.03, 0.42, 1)
+fog_light_energy = 0.9
+fog_density = 0.007
+fog_aerial_perspective = 0.15
+fog_sky_affect = 0.0
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.014
+volumetric_fog_albedo = Color(0.55, 0.35, 0.9, 1)
+volumetric_fog_emission = Color(0.09, 0.01, 0.19, 1)
+volumetric_fog_emission_energy = 0.6
+volumetric_fog_anisotropy = 0.3
+volumetric_fog_length = 90.0
+volumetric_fog_ambient_inject = 0.8
+volumetric_fog_sky_affect = 0.0
+adjustment_enabled = true
+adjustment_brightness = 1.02
+adjustment_contrast = 1.18
+adjustment_saturation = 1.3
+
+[node name="Map" type="GridMap" unique_id=539586171 node_paths=PackedStringArray("map_generator", "key_spawner", "saw_spawner", "elevator_spawner", "item_spawner", "player_spawner", "blood_spawner", "glass_wall_spawner")]
+mesh_library = ExtResource("1_mav4t")
+script = ExtResource("2_t2ufs")
+map_generator = NodePath("Scripts/Map Generator")
+key_spawner = NodePath("Scripts/Key Spawner")
+saw_spawner = NodePath("Scripts/Saw Spawner")
+elevator_spawner = NodePath("Scripts/Elevator Spawner")
+item_spawner = NodePath("Scripts/Item Spawner")
+player_spawner = NodePath("Scripts/Player Spawner")
+blood_spawner = NodePath("Scripts/Blood Spawner")
+glass_wall_spawner = NodePath("Scripts/Glass Wall Spawner")
+map_data = ExtResource("3_mm1cd")
+metadata/_editor_floor_ = Vector3(0, 0, 0)
+
+[node name="Scripts" type="Node" parent="." unique_id=411114822]
+
+[node name="Map Generator" type="Node" parent="Scripts" unique_id=921435434 node_paths=PackedStringArray("grid_map") groups=["map_generator"]]
+script = ExtResource("2_tyaxe")
+grid_map = NodePath("../..")
+ground_item_index = 1
+wall_item_index = 1
+roof_item_index = 1
+
+[node name="Key Spawner" type="Node" parent="Scripts" unique_id=195482524 node_paths=PackedStringArray("map_generator", "holder", "player_spawner")]
+script = ExtResource("4_t2j20")
+key = ExtResource("5_0tvdd")
+map_generator = NodePath("../Map Generator")
+holder = NodePath("../../Objects")
+player_spawner = NodePath("../Player Spawner")
+
+[node name="Saw Spawner" type="Node" parent="Scripts" unique_id=1497803928 node_paths=PackedStringArray("map_generator", "holder", "player_spawner", "key_spawner", "elevator_spawner")]
+script = ExtResource("6_wsdu4")
+saw_scene = ExtResource("7_iuuh5")
+map_generator = NodePath("../Map Generator")
+holder = NodePath("../../Objects")
+saw_count = 80
+min_patrol_length = 5
+max_patrol_length = 14
+min_speed = 5.0
+max_speed = 8.0
+route_spacing = 2
+player_spawner = NodePath("../Player Spawner")
+key_spawner = NodePath("../Key Spawner")
+elevator_spawner = NodePath("../Elevator Spawner")
+ai_saw_scene = ExtResource("7_sawai")
+
+[node name="Glass Wall Spawner" type="Node" parent="Scripts" unique_id=714846810 node_paths=PackedStringArray("map_generator", "holder", "elevator_spawner")]
+script = ExtResource("13_glassp")
+glass_wall_scene = ExtResource("13_glassw")
+map_generator = NodePath("../Map Generator")
+holder = NodePath("../../Objects")
+elevator_spawner = NodePath("../Elevator Spawner")
+
+[node name="Elevator Spawner" type="Node" parent="Scripts" unique_id=802434986 node_paths=PackedStringArray("map_generator", "holder", "key_spawner", "player_spawner")]
+script = ExtResource("8_4x5vj")
+elevator_scene = ExtResource("9_tnm3o")
+map_generator = NodePath("../Map Generator")
+holder = NodePath("../../Objects")
+key_spawner = NodePath("../Key Spawner")
+player_spawner = NodePath("../Player Spawner")
+min_distance_to_key = 13
+min_distance_to_player = 16
+spawn_point_count = 5
+
+[node name="Item Spawner" type="Node" parent="Scripts" unique_id=170806516 node_paths=PackedStringArray("map_generator", "holder", "key_spawner", "player_spawner")]
+script = ExtResource("10_tnm3o")
+item_scene = ExtResource("11_trlax")
+map_generator = NodePath("../Map Generator")
+holder = NodePath("../../Objects")
+key_spawner = NodePath("../Key Spawner")
+player_spawner = NodePath("../Player Spawner")
+min_distance_to_player = 3
+item_count = 256
+min_distance = 5
+
+[node name="Player Spawner" type="Node" parent="Scripts" unique_id=506162328 node_paths=PackedStringArray("map_generator", "holder")]
+script = ExtResource("12_1c076")
+player_scene = ExtResource("13_pl4yr")
+map_generator = NodePath("../Map Generator")
+spawn_point_count = 6
+holder = NodePath("../../Objects")
+
+[node name="Blood Spawner" type="Node" parent="Scripts" unique_id=506162329 node_paths=PackedStringArray("holder") groups=["blood_spawner"]]
+script = ExtResource("13_blood")
+ink_shader = ExtResource("13_ink")
+holder = NodePath("../../Blood")
+visible_deaths = 25
+
+[node name="Footprints" type="Node" parent="Scripts" unique_id=506162330 node_paths=PackedStringArray("holder", "blood_spawner")]
+script = ExtResource("17_steps")
+print_shader = ExtResource("17_print")
+holder = NodePath("../../Blood")
+blood_spawner = NodePath("../Blood Spawner")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1709855645]
+environment = SubResource("Environment_c3ncp")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="." unique_id=1709855646]
+transform = Transform3D(0.8660254, -0.31710768, 0.38683134, 0, 0.7735105, 0.63378024, -0.5, -0.5488534, 0.6696113, 0, 30, 0)
+light_color = Color(0.55, 0.72, 1, 1)
+light_energy = 0.45
+light_volumetric_fog_energy = 0.4
+light_specular = 0.6
+shadow_enabled = true
+shadow_opacity = 0.75
+directional_shadow_max_distance = 90.0
+
+[node name="FillLight" type="DirectionalLight3D" parent="." unique_id=1709855647]
+transform = Transform3D(-0.8660254, -0.25000003, -0.43301272, 0, 0.8660254, -0.5, 0.5, -0.43301272, -0.75, 0, 30, 0)
+light_color = Color(1, 0.32, 0.85, 1)
+light_energy = 0.22
+light_volumetric_fog_energy = 0.0
+light_specular = 0.25
+
+[node name="Objects" type="Node3D" parent="." unique_id=1807891898]
+
+[node name="Blood" type="Node3D" parent="." unique_id=1807891897]
+
+[node name="Game UI" parent="." unique_id=1807891899 instance=ExtResource("14_gmui")]
+pop_duration = null
+
+[node name="Pause Menu" parent="." unique_id=1074118023 instance=ExtResource("15_pause")]
+
+[node name="Run Summary" parent="." unique_id=1675142319 instance=ExtResource("16_summary")]
+row_delay = null
+type_duration = null

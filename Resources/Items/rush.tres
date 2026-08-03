@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ItemData" format=3 uid="uid://c1cne3l2jmhub"]
+
+[ext_resource type="Script" uid="uid://bsnatoh5lqagf" path="res://Scripts/Items/item_data.gd" id="1_data"]
+[ext_resource type="Texture2D" uid="uid://dohitejae5rdl" path="res://Assets/Ui/Katze.svg" id="2_icon"]
+[ext_resource type="PackedScene" path="res://Scenes/Items/rush_effect.tscn" id="3_effect"]
+[ext_resource type="AudioStream" uid="uid://dm54ixoud8jkt" path="res://Assets/Sounds/Power Up.wav" id="4_sound"]
+[ext_resource type="AudioStream" uid="uid://cwd13qqh56rjl" path="res://Assets/Sounds/music/Cat_Item.mp3" id="5_music"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "Katze"
+icon = ExtResource("2_icon")
+duration = 6.0
+accent_color = Color(1, 0.25, 0.85, 1)
+effect_scene = ExtResource("3_effect")
+weight = 0.6
+max_in_a_row = 1
+use_sound = ExtResource("4_sound")
+music = ExtResource("5_music")
+music_volume_db = -8.0

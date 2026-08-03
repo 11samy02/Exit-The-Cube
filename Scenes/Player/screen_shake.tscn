@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=4]
+
+[ext_resource type="Script" path="res://Scripts/Player/screen_shake.gd" id="1_shake"]
+
+[node name="ScreenShake" type="Node"]
+script = ExtResource("1_shake")

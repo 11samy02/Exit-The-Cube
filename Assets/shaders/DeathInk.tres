@@ -1,0 +1,28 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://ba202dlxrrig5"]
+
+[ext_resource type="Shader" uid="uid://ex7i2c87q8xm" path="res://Assets/shaders/DeathInk.gdshader" id="1_ink"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_ink")
+shader_parameter/ink_color = Color(0.85, 0.06, 0.2, 1)
+shader_parameter/ink_center = Vector3(0, 0, 0)
+shader_parameter/ink_radius = 1.7
+shader_parameter/ink_seed = 0.0
+shader_parameter/ink_fade = 1.0
+shader_parameter/ink_grow = 1.0
+shader_parameter/edge_noise = 0.42
+shader_parameter/sag = 0.3
+shader_parameter/droplets = 6
+shader_parameter/ink_thickness = 0.06
+shader_parameter/bead_width = 0.3
+shader_parameter/surface_detail = 0.4
+shader_parameter/detail_scale = 7.0
+shader_parameter/bump_strength = 3.0
+shader_parameter/shade_direction = Vector3(0.35, 1, 0.25)
+shader_parameter/shade_depth = 0.55
+shader_parameter/gloss = 1.4
+shader_parameter/gloss_sharpness = 28.0
+shader_parameter/rim_boost = 1.8
+shader_parameter/emission_strength = 0.85
+shader_parameter/aged_darkness = 0.7

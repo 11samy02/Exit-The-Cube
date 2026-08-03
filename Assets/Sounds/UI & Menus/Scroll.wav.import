@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://ctp5cs83m8ok7"
+path="res://.godot/imported/Scroll.wav-b6b52e4186b377a071d2e8de8fd1b5c3.sample"
+
+[deps]
+
+source_file="res://Assets/Sounds/UI & Menus/Scroll.wav"
+dest_files=["res://.godot/imported/Scroll.wav-b6b52e4186b377a071d2e8de8fd1b5c3.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

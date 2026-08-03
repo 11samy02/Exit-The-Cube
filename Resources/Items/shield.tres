@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" format=3 uid="uid://dm6we4pvl2x1h"]
+
+[ext_resource type="Script" uid="uid://bsnatoh5lqagf" path="res://Scripts/Items/item_data.gd" id="1_data"]
+[ext_resource type="Texture2D" uid="uid://bwgv30ltdinhu" path="res://Assets/Ui/Herz.svg" id="2_icon"]
+[ext_resource type="PackedScene" path="res://Scenes/Items/shield_effect.tscn" id="3_effect"]
+[ext_resource type="AudioStream" uid="uid://dm54ixoud8jkt" path="res://Assets/Sounds/Power Up.wav" id="4_sound"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "Herz"
+icon = ExtResource("2_icon")
+duration = 8.0
+accent_color = Color(1, 0.3, 0.45, 1)
+effect_scene = ExtResource("3_effect")
+weight = 0.8
+max_in_a_row = 1
+use_sound = ExtResource("4_sound")

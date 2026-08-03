@@ -1,0 +1,11 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Exported builds, they are attached to the releases instead
+/export/
+
+# OS junk
+Thumbs.db
+desktop.ini
+.DS_Store

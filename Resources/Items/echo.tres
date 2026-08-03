@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Items/item_data.gd" id="1_data"]
+[ext_resource type="Texture2D" uid="uid://rqrgxcetansc" path="res://Assets/Ui/echo.svg" id="2_icon"]
+[ext_resource type="PackedScene" path="res://Scenes/Items/echo_effect.tscn" id="3_effect"]
+[ext_resource type="AudioStream" uid="uid://c6i37m4bwhfhb" path="res://Assets/Sounds/UI & Menus/Equip.wav" id="4_sound"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "Echo"
+icon = ExtResource("2_icon")
+duration = 6.0
+accent_color = Color(0.4, 0.95, 1, 1)
+effect_scene = ExtResource("3_effect")
+weight = 1.0
+max_in_a_row = 2
+use_sound = ExtResource("4_sound")

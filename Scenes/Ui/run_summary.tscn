@@ -1,0 +1,202 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Ui/run_summary.gd" id="1_summary"]
+[ext_resource type="Theme" path="res://Assets/Themes/menu_theme.tres" id="2_theme"]
+[ext_resource type="FontFile" path="res://Assets/Fonts/Orbitron-Variable.ttf" id="3_orbitron"]
+
+[sub_resource type="FontVariation" id="FontVariation_title"]
+base_font = ExtResource("3_orbitron")
+variation_opentype = {
+2003265652: 800
+}
+spacing_glyph = 8
+
+[sub_resource type="LabelSettings" id="LabelSettings_title"]
+font = SubResource("FontVariation_title")
+font_size = 44
+font_color = Color(1, 1, 1, 1)
+outline_size = 6
+outline_color = Color(0.353, 0.125, 0.851, 0.75)
+shadow_size = 18
+shadow_color = Color(0.051, 0.749, 1, 0.4)
+
+[sub_resource type="LabelSettings" id="LabelSettings_level"]
+font = SubResource("FontVariation_title")
+font_size = 20
+font_color = Color(0.686, 0.647, 0.855, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_comment"]
+font_size = 24
+font_color = Color(0.129, 0.855, 1, 1)
+shadow_size = 10
+shadow_color = Color(0.051, 0.749, 1, 0.3)
+
+[sub_resource type="LabelSettings" id="LabelSettings_name"]
+font_size = 24
+font_color = Color(0.686, 0.647, 0.855, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_value"]
+font = SubResource("FontVariation_title")
+font_size = 26
+font_color = Color(1, 1, 1, 1)
+shadow_size = 8
+shadow_color = Color(0.051, 0.749, 1, 0.35)
+
+[node name="RunSummary" type="CanvasLayer"]
+layer = 80
+script = ExtResource("1_summary")
+
+[node name="Root" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+
+[node name="Dim" type="ColorRect" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.016, 0.004, 0.043, 0.78)
+
+[node name="Center" type="CenterContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="Root/Center"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Layout" type="VBoxContainer" parent="Root/Center/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="Root/Center/Panel/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "LEVEL CLEAR"
+label_settings = SubResource("LabelSettings_title")
+horizontal_alignment = 1
+
+[node name="Level" type="Label" parent="Root/Center/Panel/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "LEVEL 1   ·   3 / 12"
+label_settings = SubResource("LabelSettings_level")
+horizontal_alignment = 1
+
+[node name="Comment" type="Label" parent="Root/Center/Panel/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(520, 66)
+layout_mode = 2
+text = "Out. Barely elegant, but out."
+label_settings = SubResource("LabelSettings_comment")
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="Gap" type="Control" parent="Root/Center/Panel/Layout"]
+custom_minimum_size = Vector2(0, 6)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Stats" type="VBoxContainer" parent="Root/Center/Panel/Layout"]
+custom_minimum_size = Vector2(520, 0)
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TimeRow" type="HBoxContainer" parent="Root/Center/Panel/Layout/Stats"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Name" type="Label" parent="Root/Center/Panel/Layout/Stats/TimeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "TIME"
+label_settings = SubResource("LabelSettings_name")
+
+[node name="TimeValue" type="Label" parent="Root/Center/Panel/Layout/Stats/TimeRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0:00.00"
+label_settings = SubResource("LabelSettings_value")
+horizontal_alignment = 2
+
+[node name="DeathRow" type="HBoxContainer" parent="Root/Center/Panel/Layout/Stats"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Name" type="Label" parent="Root/Center/Panel/Layout/Stats/DeathRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "DEATHS"
+label_settings = SubResource("LabelSettings_name")
+
+[node name="DeathValue" type="Label" parent="Root/Center/Panel/Layout/Stats/DeathRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+label_settings = SubResource("LabelSettings_value")
+horizontal_alignment = 2
+
+[node name="ItemRow" type="HBoxContainer" parent="Root/Center/Panel/Layout/Stats"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Name" type="Label" parent="Root/Center/Panel/Layout/Stats/ItemRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "ITEMS FOUND"
+label_settings = SubResource("LabelSettings_name")
+
+[node name="ItemValue" type="Label" parent="Root/Center/Panel/Layout/Stats/ItemRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+label_settings = SubResource("LabelSettings_value")
+horizontal_alignment = 2
+
+[node name="UsedRow" type="HBoxContainer" parent="Root/Center/Panel/Layout/Stats"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Name" type="Label" parent="Root/Center/Panel/Layout/Stats/UsedRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "ITEMS USED"
+label_settings = SubResource("LabelSettings_name")
+
+[node name="UsedValue" type="Label" parent="Root/Center/Panel/Layout/Stats/UsedRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+label_settings = SubResource("LabelSettings_value")
+horizontal_alignment = 2
+
+[node name="Gap2" type="Control" parent="Root/Center/Panel/Layout"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="RetryButton" type="Button" parent="Root/Center/Panel/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 62)
+layout_mode = 2
+text = "NEW RUN"
+
+[node name="TitleButton" type="Button" parent="Root/Center/Panel/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 62)
+layout_mode = 2
+text = "TITLE SCREEN"

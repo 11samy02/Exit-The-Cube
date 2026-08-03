@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" uid="uid://c5r0kdhebd8lu" path="res://Scripts/Enviroment/map_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "LEVEL 30"
+world_seed = -1
+shape = 0
+size = 23
+openness = 0.39
+with_roof = true
+roof_openness = 0.0
+roof_hole_size = 6.0
+ground_item_index = 1
+wall_item_index = 1
+roof_item_index = 1
+player_spawn_point_count = 1
+key_spawn_point_count = 6
+key_min_distance_to_player = 8
+elevator_min_distance_to_key = 8
+elevator_min_distance_to_player = 10
+elevator_spawn_point_count = 6
+saw_count = 14
+saw_min_patrol_length = 3
+saw_max_patrol_length = 8
+saw_min_speed = 5.73
+saw_max_speed = 7.26
+saw_route_spacing = 1
+ai_saw_count = 0
+item_pool = Array[String](["arrow", "echo", "freeze", "rush", "saw_paths", "shield", "speed"])
+item_count = 9
+item_min_distance = 4
+item_min_distance_to_player = 3
+map_seed = 1390
+key_spawn_seed = -1
+saw_spawn_seed = -1
+elevator_spawn_seed = -1
+item_spawn_seed = -1
+player_spawn_seed = 1395
+glass_wall_seed = -1
+metadata/_custom_type_script = "uid://c5r0kdhebd8lu"

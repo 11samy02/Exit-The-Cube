@@ -1,0 +1,334 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Ui/level_select.gd" id="1_select"]
+[ext_resource type="FontFile" uid="uid://hx07oyjr0bm1" path="res://Assets/Fonts/Orbitron-Variable.ttf" id="2_orbitron"]
+[ext_resource type="FontFile" uid="uid://y8peg4x6b6cg" path="res://Assets/Fonts/Rajdhani-Medium.ttf" id="3_body"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_heading"]
+font = ExtResource("2_orbitron")
+font_size = 38
+outline_size = 6
+outline_color = Color(0.353, 0.125, 0.851, 0.85)
+
+[sub_resource type="LabelSettings" id="LabelSettings_number"]
+font = ExtResource("2_orbitron")
+font_size = 116
+shadow_size = 26
+shadow_color = Color(0.051, 0.749, 1, 0.3)
+
+[sub_resource type="LabelSettings" id="LabelSettings_name"]
+font = ExtResource("2_orbitron")
+font_size = 30
+font_color = Color(0.95, 0.94, 1, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_state"]
+font = ExtResource("3_body")
+font_size = 24
+font_color = Color(0.35, 0.95, 1, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_side_number"]
+font = ExtResource("2_orbitron")
+font_size = 46
+font_color = Color(0.55, 0.5, 0.7, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_side_name"]
+font = ExtResource("3_body")
+font_size = 22
+font_color = Color(0.45, 0.42, 0.58, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_tile_value"]
+font = ExtResource("2_orbitron")
+font_size = 40
+font_color = Color(1, 0.82, 0.35, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_tile_key"]
+font = ExtResource("3_body")
+font_size = 21
+font_color = Color(0.58, 0.55, 0.72, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.028, 0.016, 0.065, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.353, 0.125, 0.851, 0.8)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+content_margin_left = 56.0
+content_margin_top = 34.0
+content_margin_right = 56.0
+content_margin_bottom = 34.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card"]
+bg_color = Color(0.06, 0.035, 0.13, 0.9)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.35, 0.95, 1, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 34.0
+content_margin_top = 18.0
+content_margin_right = 34.0
+content_margin_bottom = 18.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tile"]
+bg_color = Color(0.05, 0.03, 0.11, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.353, 0.125, 0.851, 0.5)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 26.0
+content_margin_top = 14.0
+content_margin_right = 26.0
+content_margin_bottom = 14.0
+
+[node name="LevelSelect" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_select")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.7)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Column" type="VBoxContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Title" type="Label" parent="Center/Panel/Column"]
+layout_mode = 2
+text = "SELECT LEVEL"
+label_settings = SubResource("LabelSettings_heading")
+horizontal_alignment = 1
+
+[node name="Carousel" type="HBoxContainer" parent="Center/Panel/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 22
+alignment = 1
+
+[node name="PreviousCard" type="Button" parent="Center/Panel/Column/Carousel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(210, 150)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="Stack" type="VBoxContainer" parent="Center/Panel/Column/Carousel/PreviousCard"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+alignment = 1
+
+[node name="PreviousNumber" type="Label" parent="Center/Panel/Column/Carousel/PreviousCard/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+text = "10"
+label_settings = SubResource("LabelSettings_side_number")
+horizontal_alignment = 1
+
+[node name="PreviousName" type="Label" parent="Center/Panel/Column/Carousel/PreviousCard/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+text = "LEVEL 8"
+label_settings = SubResource("LabelSettings_side_name")
+horizontal_alignment = 1
+text_overrun_behavior = 3
+
+[node name="MainCard" type="PanelContainer" parent="Center/Panel/Column/Carousel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(560, 250)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_card")
+
+[node name="Stack" type="VBoxContainer" parent="Center/Panel/Column/Carousel/MainCard"]
+layout_mode = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="Number" type="Label" parent="Center/Panel/Column/Carousel/MainCard/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "11"
+label_settings = SubResource("LabelSettings_number")
+horizontal_alignment = 1
+
+[node name="LevelName" type="Label" parent="Center/Panel/Column/Carousel/MainCard/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "LEVEL 9"
+label_settings = SubResource("LabelSettings_name")
+horizontal_alignment = 1
+
+[node name="StateValue" type="Label" parent="Center/Panel/Column/Carousel/MainCard/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "NEXT UP"
+label_settings = SubResource("LabelSettings_state")
+horizontal_alignment = 1
+
+[node name="NextCard" type="Button" parent="Center/Panel/Column/Carousel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(210, 150)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="Stack" type="VBoxContainer" parent="Center/Panel/Column/Carousel/NextCard"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+alignment = 1
+
+[node name="NextNumber" type="Label" parent="Center/Panel/Column/Carousel/NextCard/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+text = "01"
+label_settings = SubResource("LabelSettings_side_number")
+horizontal_alignment = 1
+
+[node name="NextName" type="Label" parent="Center/Panel/Column/Carousel/NextCard/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+text = "TUTORIAL"
+label_settings = SubResource("LabelSettings_side_name")
+horizontal_alignment = 1
+text_overrun_behavior = 3
+
+[node name="Stats" type="HBoxContainer" parent="Center/Panel/Column"]
+layout_mode = 2
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="TimeTile" type="PanelContainer" parent="Center/Panel/Column/Stats"]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_tile")
+
+[node name="Stack" type="VBoxContainer" parent="Center/Panel/Column/Stats/TimeTile"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="TimeValue" type="Label" parent="Center/Panel/Column/Stats/TimeTile/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+label_settings = SubResource("LabelSettings_tile_value")
+horizontal_alignment = 1
+
+[node name="TimeKey" type="Label" parent="Center/Panel/Column/Stats/TimeTile/Stack"]
+layout_mode = 2
+text = "BEST TIME"
+label_settings = SubResource("LabelSettings_tile_key")
+horizontal_alignment = 1
+
+[node name="DeathTile" type="PanelContainer" parent="Center/Panel/Column/Stats"]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_tile")
+
+[node name="Stack" type="VBoxContainer" parent="Center/Panel/Column/Stats/DeathTile"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="DeathValue" type="Label" parent="Center/Panel/Column/Stats/DeathTile/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+label_settings = SubResource("LabelSettings_tile_value")
+horizontal_alignment = 1
+
+[node name="DeathKey" type="Label" parent="Center/Panel/Column/Stats/DeathTile/Stack"]
+layout_mode = 2
+text = "FEWEST DEATHS"
+label_settings = SubResource("LabelSettings_tile_key")
+horizontal_alignment = 1
+
+[node name="ProgressTile" type="PanelContainer" parent="Center/Panel/Column/Stats"]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_tile")
+
+[node name="Stack" type="VBoxContainer" parent="Center/Panel/Column/Stats/ProgressTile"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="ProgressValue" type="Label" parent="Center/Panel/Column/Stats/ProgressTile/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0 / 0"
+label_settings = SubResource("LabelSettings_tile_value")
+horizontal_alignment = 1
+
+[node name="ProgressKey" type="Label" parent="Center/Panel/Column/Stats/ProgressTile/Stack"]
+layout_mode = 2
+text = "LEVELS CLEARED"
+label_settings = SubResource("LabelSettings_tile_key")
+horizontal_alignment = 1
+
+[node name="Strip" type="HBoxContainer" parent="Center/Panel/Column"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 7
+alignment = 1
+
+[node name="Buttons" type="HBoxContainer" parent="Center/Panel/Column"]
+layout_mode = 2
+theme_override_constants/separation = 24
+alignment = 1
+
+[node name="PlayButton" type="Button" parent="Center/Panel/Column/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 64)
+layout_mode = 2
+text = "PLAY"
+
+[node name="BackButton" type="Button" parent="Center/Panel/Column/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 64)
+layout_mode = 2
+text = "BACK"

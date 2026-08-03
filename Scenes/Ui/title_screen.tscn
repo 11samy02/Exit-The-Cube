@@ -1,0 +1,183 @@
+[gd_scene format=3 uid="uid://cun0p4kf4hegk"]
+
+[ext_resource type="Script" uid="uid://yqusr2tw13pp" path="res://Scripts/Ui/title_screen.gd" id="1_title"]
+[ext_resource type="Theme" path="res://Assets/Themes/menu_theme.tres" id="2_theme"]
+[ext_resource type="Shader" uid="uid://o38335ahv2bm" path="res://Assets/shaders/title_bg.gdshader" id="3_bg"]
+[ext_resource type="FontFile" uid="uid://hx07oyjr0bm1" path="res://Assets/Fonts/Orbitron-Variable.ttf" id="4_orbitron"]
+[ext_resource type="FontFile" uid="uid://y8peg4x6b6cg" path="res://Assets/Fonts/Rajdhani-Medium.ttf" id="5_body"]
+[ext_resource type="PackedScene" path="res://Scenes/Ui/options_menu.tscn" id="6_options"]
+[ext_resource type="PackedScene" path="res://Scenes/Ui/level_select.tscn" id="7_levels"]
+[ext_resource type="PackedScene" path="res://Scenes/Ui/credits.tscn" id="8_credits"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_bg"]
+shader = ExtResource("3_bg")
+shader_parameter/sky_top = Color(0.006, 0, 0.024, 1)
+shader_parameter/sky_bottom = Color(0.09, 0.012, 0.2, 1)
+shader_parameter/grid_color = Color(0.42, 0.18, 1, 1)
+shader_parameter/glow_color = Color(0, 0.85, 1, 1)
+shader_parameter/horizon = 0.58
+shader_parameter/speed = 0.6
+shader_parameter/lane_width = 6.0
+shader_parameter/grid_depth = 0.6
+shader_parameter/scanline_strength = 0.06
+shader_parameter/vignette_strength = 0.55
+
+[sub_resource type="FontVariation" id="FontVariation_title"]
+base_font = ExtResource("4_orbitron")
+variation_opentype = {
+2003265652: 900
+}
+spacing_glyph = 14
+
+[sub_resource type="LabelSettings" id="LabelSettings_title"]
+font = SubResource("FontVariation_title")
+font_size = 112
+outline_size = 10
+outline_color = Color(0.353, 0.125, 0.851, 0.85)
+shadow_size = 28
+shadow_color = Color(0.051, 0.749, 1, 0.45)
+
+[sub_resource type="LabelSettings" id="LabelSettings_subtitle"]
+font = ExtResource("5_body")
+font_size = 28
+font_color = Color(0.616, 0.588, 0.749, 1)
+
+[node name="TitleScreen" type="Control" unique_id=782645538]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_title")
+
+[node name="Background" type="ColorRect" parent="." unique_id=1017955055]
+material = SubResource("ShaderMaterial_bg")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Layout" type="MarginContainer" parent="." unique_id=321401704]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 80
+theme_override_constants/margin_top = 90
+theme_override_constants/margin_right = 80
+theme_override_constants/margin_bottom = 90
+
+[node name="Column" type="VBoxContainer" parent="Layout" unique_id=1870476543]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="Layout/Column" unique_id=1718170839]
+unique_name_in_owner = true
+layout_mode = 2
+text = "EXIT THE CUBE"
+label_settings = SubResource("LabelSettings_title")
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Layout/Column" unique_id=414172378]
+unique_name_in_owner = true
+layout_mode = 2
+text = "FIND THE KEY  -  REACH THE ELEVATOR"
+label_settings = SubResource("LabelSettings_subtitle")
+horizontal_alignment = 1
+
+[node name="Gap" type="Control" parent="Layout/Column" unique_id=1689248563]
+custom_minimum_size = Vector2(0, 70)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="MenuColumn" type="VBoxContainer" parent="Layout/Column" unique_id=556668215]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/separation = 16
+
+[node name="ContinueButton" type="Button" parent="Layout/Column/MenuColumn" unique_id=1366496659]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 66)
+layout_mode = 2
+text = "CONTINUE"
+
+[node name="LevelsButton" type="Button" parent="Layout/Column/MenuColumn" unique_id=1366496658]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 66)
+layout_mode = 2
+text = "LEVELS"
+
+[node name="StartButton" type="Button" parent="Layout/Column/MenuColumn" unique_id=1366496660]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 66)
+layout_mode = 2
+text = "START"
+
+[node name="OptionsButton" type="Button" parent="Layout/Column/MenuColumn" unique_id=1152258509]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 66)
+layout_mode = 2
+text = "OPTIONS"
+
+[node name="CreditsButton" type="Button" parent="Layout/Column/MenuColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 66)
+layout_mode = 2
+text = "CREDITS"
+
+[node name="QuitButton" type="Button" parent="Layout/Column/MenuColumn" unique_id=1404211800]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(340, 66)
+layout_mode = 2
+text = "EXIT GAME"
+
+[node name="Version" type="Label" parent="." unique_id=1494104500]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -320.0
+offset_top = -60.0
+offset_right = -30.0
+offset_bottom = -20.0
+grow_horizontal = 0
+grow_vertical = 0
+text = "v0.1.0"
+label_settings = SubResource("LabelSettings_subtitle")
+horizontal_alignment = 2
+
+[node name="OptionsMenu" parent="." unique_id=531825636 instance=ExtResource("6_options")]
+unique_name_in_owner = true
+layout_mode = 1
+
+[node name="LevelSelect" parent="." unique_id=531825637 instance=ExtResource("7_levels")]
+unique_name_in_owner = true
+layout_mode = 1
+
+[node name="Credits" parent="." instance=ExtResource("8_credits")]
+unique_name_in_owner = true
+layout_mode = 1
+
+[node name="Boot" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 1)
