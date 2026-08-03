@@ -28,7 +28,7 @@ const BEATS := [
 @export var fade_in: float = 0.5
 
 ## Seconds it stands there once it is up
-@export var hold: float = 1.15
+@export var hold: float = 0.9
 
 ## Seconds it takes to leave again
 @export var fade_out: float = 0.4
@@ -118,7 +118,7 @@ func _queue_beat(beat: Dictionary) -> void:
 	_sequence.parallel().tween_property(_logo, "offset_transform_scale", Vector2.ONE, fade_in) \
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_sequence.parallel().tween_property(_line, "modulate:a", 1.0, fade_in) \
-		.set_delay(fade_in * 0.45)
+		.set_delay(fade_in * 0.3)
 
 	_sequence.tween_interval(hold)
 
