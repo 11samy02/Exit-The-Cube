@@ -24,6 +24,11 @@ const BEATS := [
 
 @export_group("Timing")
 
+## Seconds the screen takes to come up out of black at the very start. The
+## window is handed over black by the engine, and this is what turns that into
+## the opening of the sequence instead of a frame that was there before it
+@export var boot_fade: float = 0.35
+
 ## Seconds a logo takes to come up
 @export var fade_in: float = 0.5
 
@@ -73,7 +78,7 @@ func _ready() -> void:
 	_stack.modulate = Color(1, 1, 1, 0)
 	_line.modulate = Color(1, 1, 1, 0)
 	_skip.modulate = Color(1, 1, 1, 0)
-	_blackout.color = Color(0, 0, 0, 0)
+	_blackout.color = Color(0, 0, 0, 1)
 
 	_fade_in_skip()
 	_play()
@@ -95,6 +100,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## and leaves, and the screen goes black behind the last one
 func _play() -> void:
 	_sequence = create_tween()
+	_sequence.tween_property(_blackout, "color:a", 0.0, boot_fade)
 
 	for beat in BEATS:
 		_queue_beat(beat)
@@ -107,7 +113,7 @@ func _play() -> void:
 ## yet. It fades in once the first logo is up and stays for the rest of the run
 func _fade_in_skip() -> void:
 	var tween := create_tween()
-	tween.tween_interval(fade_in + hold * 0.5)
+	tween.tween_interval(boot_fade + fade_in + hold * 0.5)
 	tween.tween_property(_skip, "modulate:a", 0.55, 0.7)
 
 

@@ -9,15 +9,16 @@ extends Control
 signal closed
 
 ## The rows of the panel, in the order they come up. Left is what the entry is
-## for, right is who or what it was
+## for, right is who or what it was.
+##
+## Short on purpose. Nothing the game is built from asks to be named here: the
+## icons are CC0, the fonts only want their license file shipped alongside them
+## and it is, the sound packs are royalty free, and the engine carries its own
+## notice inside the binary. Where every asset came from is written down beside
+## it in the SOURCES.md files, which is the place that has to be right
 const ENTRIES := [
 	["GAME, CODE & DESIGN", "Samy Abuaisheh"],
 	["ENGINE", "Godot Engine 4.7"],
-	["FONTS", "Orbitron & Rajdhani, SIL Open Font License 1.1"],
-	["INPUT PROMPTS", "Kenney, Input Prompts 1.5A (CC0)"],
-	["SOUND", "Sound FX Starter Pack Vol. 1, Sonniss GDC Bundle"],
-	["MUSIC", "Spacewave Pack"],
-	["PLAYTESTING", "one cube, several thousand deaths"],
 ]
 
 ## Every game ships with a list of known issues. This one knows where they come
