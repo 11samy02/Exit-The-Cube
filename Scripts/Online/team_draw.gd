@@ -66,6 +66,20 @@ static func spawns_of(teams: Dictionary, count: int, cells: Array, size: int) ->
 	return spawns
 
 
+## The stretch of maze a team calls its own, nearest cell to its corner first.
+##
+## Used for coming back rather than for coming in. A player who dies should not
+## be handed the same tile every time — they have just painted everything around
+## it, and standing them back on it makes a death cost the walk out and nothing
+## else. Anywhere in their own end of the maze is fair, and it does not have to
+## agree with the other machines: where this cube reappears reaches them as a
+## position like every other one
+static func region_of(team: int, cells: Array, size: int, take: int) -> Array:
+	var ranked := _by_distance(cells, _corner_of(team, size))
+	ranked.resize(mini(maxi(take, 1), ranked.size()))
+	return ranked
+
+
 ## The corner of the map a team starts from. The first two are diagonally
 ## opposite on purpose, so a two team round opens at opposite ends of the maze
 ## rather than with both sides sharing a wall

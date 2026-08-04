@@ -176,6 +176,7 @@ func _apply_items() -> void:
 	item_spawner.min_distance = map_data.item_min_distance
 	item_spawner.min_distance_to_player = map_data.item_min_distance_to_player
 	item_spawner.spawn_seed = map_data.item_spawn_seed
+	item_spawner.restock = map_data.restock_items
 
 
 ## A level that says it has no glass walls gets none, whatever count it carries.

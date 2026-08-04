@@ -137,6 +137,11 @@ const MSG_HIT := 8
 ## meters. A little over one cell, so a pass down the same corridor lands it
 const HIT_RANGE := 2.4
 
+## How many cells at a team's end of the maze a player may come back at. Wide
+## enough that a death does not put them back on the tile they just left, tight
+## enough that they are still on their own side
+const RESPAWN_SPREAD := 40
+
 ## How often a cube tells the others where it is. Fifteen a second is enough for
 ## a ghost the interpolation smooths anyway, and it keeps twelve players inside
 ## a couple of kilobytes a second
@@ -204,6 +209,10 @@ var teams: Dictionary = {}
 
 ## Where each account comes into the maze, one cell each and no two the same
 var spawns: Dictionary = {}
+
+## The cells this cube may come back at, and the last one it used
+var _respawn_pool: Array = []
+var _last_respawn: Vector2i = Vector2i(-1, -1)
 
 ## Tiles this cube has taken, oldest first, with the stamp each was taken under.
 ## A death gives the last few of them back, so the order matters
@@ -932,6 +941,8 @@ func _draw_teams() -> void:
 	paint.clear()
 	teams.clear()
 	spawns.clear()
+	_respawn_pool.clear()
+	_last_respawn = Vector2i(-1, -1)
 	_my_tiles.clear()
 	_pending_paint.clear()
 	_paint_timer = 0.0
@@ -950,11 +961,29 @@ func spawn_cells_from(cells: Array, size: int) -> void:
 		return
 
 	spawns = TeamDraw.spawns_of(teams, RaceRules.team_count(settings), cells, size)
+	_respawn_pool = TeamDraw.region_of(team_of(steam.id), cells, size, RESPAWN_SPREAD)
 
 
 ## Where this cube comes in, or a cell of -1 when the mode does not place people
 func spawn_cell() -> Vector2i:
 	return spawns.get(steam.id, Vector2i(-1, -1))
+
+
+## Where this cube comes back after a death: anywhere in its own end of the
+## maze, and never twice in a row on the same tile. Coming back where you fell
+## is coming back onto floor you had already painted, so the walk out is the
+## whole of what the death cost
+func respawn_cell() -> Vector2i:
+	if _respawn_pool.size() < 2:
+		return spawn_cell()
+
+	var picked: Vector2i = _last_respawn
+
+	while picked == _last_respawn:
+		picked = _respawn_pool[randi() % _respawn_pool.size()]
+
+	_last_respawn = picked
+	return picked
 
 
 ## One runner per cube in the lobby, all of them on zero. A ghost is only drawn
@@ -1431,6 +1460,8 @@ func _reset() -> void:
 	paint.clear()
 	teams.clear()
 	spawns.clear()
+	_respawn_pool.clear()
+	_last_respawn = Vector2i(-1, -1)
 	_my_tiles.clear()
 	_pending_paint.clear()
 	_round_ended = false

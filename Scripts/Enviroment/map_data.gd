@@ -159,6 +159,10 @@ class_name MapData
 ## Minimum number of cells between a sphere and the player start
 @export var item_min_distance_to_player: int = 1
 
+## Whether spheres are put back as they are taken. A level that is played to an
+## exit is laid out once; one that runs to a clock is picked clean without this
+@export var restock_items: bool = false
+
 @export_group("Seeds")
 
 ## Only read while world_seed is -1, it overwrites every one of them otherwise.

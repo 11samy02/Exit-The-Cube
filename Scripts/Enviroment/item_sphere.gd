@@ -9,7 +9,40 @@ class_name ItemSphere
 @onready var sparks: GPUParticles3D = $Sparks
 @onready var pickup_sound: AudioStreamPlayer3D = $PickupSound
 
+## Seconds the sphere takes to wind itself into existence
+@export var appear_duration: float = 0.5
+
+## How far past its own size it swells on the way in, before settling
+@export var appear_overshoot: float = 1.25
+
+## Turns it spins while it forms
+@export var appear_spins: float = 1.5
+
 var collected: bool = false
+
+
+## Winds the sphere into the level rather than letting it blink into a corridor
+## somebody is looking at. Used by a mode that puts spheres back while it runs —
+## a level that lays them all out before anybody is there has nobody to hide the
+## pop from, and does not need this
+func appear() -> void:
+	monitoring = false
+	scale = Vector3.ZERO
+	sparks.restart()
+
+	var turn := rotation
+	turn.y += TAU * appear_spins
+
+	var arrival := create_tween()
+	arrival.set_parallel(true)
+	arrival.tween_property(self, "scale", Vector3.ONE, appear_duration) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).from(Vector3.ONE * 0.01)
+	arrival.tween_property(self, "rotation", turn, appear_duration) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+	await arrival.finished
+	if is_inside_tree() and not collected:
+		set_deferred("monitoring", true)
 
 
 ## Bursts on the first touch, every later contact is ignored. The item that

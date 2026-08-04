@@ -85,8 +85,11 @@ func entrance_lead() -> float:
 func respawn() -> void:
 	var spawner := get_tree().get_first_node_in_group("player_spawner") as PlayerSpawner
 	var body := movement.body
+	var cell := Online.respawn_cell()
 
-	if spawner != null and not spawner.spawn_points.is_empty():
+	if spawner != null and cell.x >= 0:
+		body.global_position = spawner.cell_to_world(cell)
+	elif spawner != null and not spawner.spawn_points.is_empty():
 		body.global_position = spawner.cell_to_world(spawner.spawn_points[0])
 
 	body.velocity = Vector3.ZERO

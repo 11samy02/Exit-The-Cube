@@ -29,6 +29,10 @@ const STRIP_MARGIN := 26.0
 ## is how far the column titles over it have to be pushed in to line up
 const ROW_INSET := 18
 
+## How wide the card that counts a death down is. Fixed so the number inside it
+## does not make the whole thing jump between one digit and two
+const DOWN_CARD_WIDTH := 380.0
+
 ## How far the spectator bar sits off the bottom. Clear of the level banner the
 ## game UI puts down there, the two of them are up at the same time
 const WATCH_MARGIN := 130.0
@@ -139,24 +143,46 @@ func _build_standings() -> void:
 ## has no way of telling a penalty from a hang. This says how long is left, what
 ## it cost, and that the cube is coming back
 func _build_down_card() -> void:
-	var frame := OnlineUi.panel(OnlineUi.WAITING, 0.9)
+	var frame := PanelContainer.new()
 	frame.visible = false
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.custom_minimum_size = Vector2(DOWN_CARD_WIDTH, 0)
+	frame.add_theme_stylebox_override("panel", _down_style())
 	add_child(frame)
 	_pin(frame, 0.5, 0.5, Control.GROW_DIRECTION_BOTH, Control.GROW_DIRECTION_BOTH, Vector2.ZERO)
 	_down_card = frame
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 2)
+	column.add_theme_constant_override("separation", 8)
 	frame.add_child(column)
 
-	_down_clock = OnlineUi.heading("", 78, OnlineUi.TEXT)
+	var title := OnlineUi.heading("RESPAWN IN", 24, OnlineUi.WAITING)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(title)
+
+	_down_clock = OnlineUi.heading("", 82, OnlineUi.TEXT)
 	_down_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(_down_clock)
 
-	_down_cost = OnlineUi.body("", 20, OnlineUi.WAITING)
+	_down_cost = OnlineUi.body("", 21, OnlineUi.MUTED)
 	_down_cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(_down_cost)
+
+
+## The card's own frame rather than the shared one. The panels elsewhere are
+## built for rows of text and their padding is measured for that; a single
+## eighty point number inside the same margins sits against its own border
+func _down_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.04, 0.03, 0.08, 0.94)
+	style.border_color = OnlineUi.WAITING
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 40.0
+	style.content_margin_right = 40.0
+	style.content_margin_top = 22.0
+	style.content_margin_bottom = 26.0
+	return style
 
 
 ## Counts the wait down, and says what the death took. The number is read off
@@ -169,7 +195,7 @@ func _draw_down_card() -> void:
 		return
 
 	_down_clock.text = "%d" % maxi(ceili(left), 1)
-	_down_cost.text = "−%d TILES" % RaceRules.DEATH_TILE_PENALTY
+	_down_cost.text = "%d tiles lost" % RaceRules.DEATH_TILE_PENALTY
 
 
 ## Sticks a control to one corner and lets it size itself from there. Handing a

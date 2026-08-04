@@ -143,7 +143,7 @@ min_distance_to_key = 13
 min_distance_to_player = 16
 spawn_point_count = 5
 
-[node name="Item Spawner" type="Node" parent="Scripts" unique_id=170806516 node_paths=PackedStringArray("map_generator", "holder", "key_spawner", "player_spawner")]
+[node name="Item Spawner" type="Node" parent="Scripts" unique_id=170806516 node_paths=PackedStringArray("map_generator", "holder", "key_spawner", "player_spawner") groups=["item_spawner"]]
 script = ExtResource("10_tnm3o")
 item_scene = ExtResource("11_trlax")
 map_generator = NodePath("../Map Generator")

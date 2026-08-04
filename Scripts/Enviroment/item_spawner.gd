@@ -41,7 +41,21 @@ class_name ItemSpawner
 ## Stands in for "no sphere anywhere near", any real distance beats it
 const NO_NEIGHBOUR := 0x7FFFFFFF
 
+## True while the level keeps putting spheres back as they are taken. Off for
+## the campaign, where a level is laid out once and then played
+@export var restock: bool = false
+
+## Seconds between one sphere being taken and the next appearing
+@export var restock_delay: float = 6.0
+
+## How far a fresh sphere has to stay from anybody standing about, in meters.
+## Without it they would appear under whoever just emptied the map
+@export var restock_clearance: float = 12.0
+
 var rng := RandomNumberGenerator.new()
+
+## Seconds until the next sphere is put back
+var _restock_timer: float = 0.0
 
 var spawned_items: Array[Node3D] = []
 
@@ -145,6 +159,67 @@ func _place_item(cell: Vector2i) -> void:
 
 	spawned_items.append(item)
 	used_cells.append(cell)
+
+
+## Puts spheres back while the level runs, one at a time.
+##
+## A mode that ends on a clock rather than at an exit is picked clean inside the
+## first minute otherwise, and spends the rest of the round with nothing to find.
+## They come back somewhere else rather than where they were taken, so the map
+## does not turn into a set of fixed pickup points people camp
+func _process(delta: float) -> void:
+	if not restock:
+		return
+
+	_prune_taken()
+
+	if spawned_items.size() >= item_count:
+		_restock_timer = restock_delay
+		return
+
+	_restock_timer -= delta
+	if _restock_timer > 0.0:
+		return
+
+	_restock_timer = restock_delay
+	_restock_one()
+
+
+## Forgets the spheres that have been taken, so their cells are free again
+func _prune_taken() -> void:
+	for at in range(spawned_items.size() - 1, -1, -1):
+		if not is_instance_valid(spawned_items[at]):
+			spawned_items.remove_at(at)
+			used_cells.remove_at(at)
+
+
+## One fresh sphere, somewhere with nothing else on it and nobody standing there
+func _restock_one() -> void:
+	var free_cells := map_generator.get_path_cells().filter(
+		func(c: Vector2i) -> bool: return not used_cells.has(c) and not _crowded(c)
+	)
+
+	if free_cells.is_empty():
+		return
+
+	var cell: Vector2i = free_cells[randi() % free_cells.size()]
+	_place_item(cell)
+
+	var sphere := spawned_items[spawned_items.size() - 1] as ItemSphere
+	if sphere != null:
+		sphere.appear()
+
+
+## True when somebody is close enough that a sphere appearing there would be
+## picked up by standing still rather than by going and getting it
+func _crowded(cell: Vector2i) -> bool:
+	var at := _cell_to_world(cell)
+
+	for node in get_tree().get_nodes_in_group("player"):
+		if (node as Node3D).global_position.distance_to(at) < restock_clearance:
+			return true
+
+	return false
 
 
 func _clear_items() -> void:

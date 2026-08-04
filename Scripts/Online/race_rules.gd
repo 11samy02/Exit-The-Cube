@@ -406,6 +406,7 @@ static func _apply_items(level: MapData, corridors: float, rules: Dictionary, pa
 		MIN_ITEMS, MAX_ITEMS)
 	level.item_min_distance = 4
 	level.item_min_distance_to_player = 3
+	level.restock_items = paint
 
 
 static func _apply_glass(level: MapData, corridors: float, rules: Dictionary) -> void:
