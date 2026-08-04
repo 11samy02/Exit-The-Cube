@@ -39,6 +39,10 @@ const FRIEND_FLAG_IMMEDIATE := 4
 ## The persona state of somebody who is not signed in
 const PERSONA_OFFLINE := 0
 
+## How many packets are drained in one frame. A queue that somehow never empties
+## would otherwise hold the frame open forever
+const MAX_PACKETS_PER_FRAME := 256
+
 ## The Steamworks singleton, null when the extension did not load
 var api: Object = null
 
@@ -90,6 +94,10 @@ func start() -> bool:
 	id = int(api.call("getSteamID")) if api.has_method("getSteamID") else 0
 	running = id != 0
 	error = "" if running else _verbal(report)
+
+	if running:
+		_do("allowP2PPacketRelay", [true])
+
 	return running
 
 
@@ -240,24 +248,55 @@ func send(target: int, payload: PackedByteArray, reliable: bool) -> void:
 	_do("sendP2PPacket", [target, payload, kind, CHANNEL])
 
 
-## Everything that arrived since the last call, oldest first. Each entry is
-## whatever readP2PPacket handed back: the sender and the bytes
+## Every payload that arrived since the last call, oldest first, as raw bytes.
+##
+## Only the bytes come back, not the sender. Which key readP2PPacket names the
+## remote account under has moved between GodotSteam versions, and reading the
+## wrong one hands back a zero that every caller then quietly drops — a whole
+## race that never syncs and never says why. So the sender travels inside the
+## payload instead, where this file cannot get it wrong
 func receive() -> Array:
-	var packets: Array = []
+	var payloads: Array = []
 	if not running:
-		return packets
+		return payloads
 
 	var size := int(_ask("getAvailableP2PPacketSize", [CHANNEL], 0))
+	var guard := MAX_PACKETS_PER_FRAME
 
-	while size > 0:
+	while size > 0 and guard > 0:
+		guard -= 1
 		var packet: Dictionary = _ask("readP2PPacket", [size, CHANNEL], {})
-		if packet.is_empty():
+		var bytes := _payload_of(packet)
+
+		if bytes.is_empty():
 			break
 
-		packets.append(packet)
+		payloads.append(bytes)
 		size = int(_ask("getAvailableP2PPacketSize", [CHANNEL], 0))
 
-	return packets
+	return payloads
+
+
+## The bytes out of whatever shape this GodotSteam hands a packet back in. The
+## known key is tried first and anything that is a byte array is taken after
+## that, so a renamed field costs nothing
+func _payload_of(packet: Dictionary) -> PackedByteArray:
+	for key: String in ["data", "payload", "packet"]:
+		if packet.get(key) is PackedByteArray:
+			return packet[key]
+
+	for value: Variant in packet.values():
+		if value is PackedByteArray:
+			return value
+
+	return PackedByteArray()
+
+
+## True while Steam reports a working line to that account. Used only to tell
+## the player whether the other cubes are reachable at all
+func session_is_open(account: int) -> bool:
+	var state: Dictionary = _ask("getP2PSessionState", [account], {})
+	return bool(state.get("connection_active", false))
 
 
 func accept_session(account: int) -> void:

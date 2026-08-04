@@ -35,6 +35,7 @@ const WATCH_MARGIN := 130.0
 
 var _strip: PanelContainer = null
 var _strip_note: Label = null
+var _link: Label = null
 var _standings: VBoxContainer = null
 var _panel_root: Control = null
 var _panel_rows: VBoxContainer = null
@@ -105,6 +106,10 @@ func _build_standings() -> void:
 	_standings = VBoxContainer.new()
 	_standings.add_theme_constant_override("separation", 4)
 	column.add_child(_standings)
+
+	column.add_child(OnlineUi.gap(4))
+	_link = OnlineUi.body("", 15, OnlineUi.MUTED)
+	column.add_child(_link)
 
 
 ## Sticks a control to one corner and lets it size itself from there. Handing a
@@ -275,6 +280,29 @@ func _draw_strip(standings: Array) -> void:
 		_standings.add_child(_build_strip_row(runner))
 
 	_strip_note.text = OnlineUi.format_time(GameState.run_time)
+	_draw_link()
+
+
+## The state of the lines to the other cubes, in one line under the board.
+##
+## It is there because "nothing is syncing" is the least useful bug report there
+## is and this turns it into a readable one. Packets leaving with none coming
+## back is a line that never opened; both numbers climbing with a board that is
+## still wrong is something further up entirely
+func _draw_link() -> void:
+	var report := Online.link_report()
+	var peers := int(report["peers"])
+
+	if peers <= 0:
+		_link.text = "racing alone"
+		_link.label_settings.font_color = OnlineUi.MUTED
+		return
+
+	var open := int(report["open"])
+	_link.text = "net  %d up  %d down  ·  %d / %d linked" % [
+		int(report["sent"]), int(report["received"]), open, peers,
+	]
+	_link.label_settings.font_color = OnlineUi.MUTED if open == peers else OnlineUi.WAITING
 
 
 ## The place is drawn in the podium colors and the row this machine is on burns

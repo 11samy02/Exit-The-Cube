@@ -66,11 +66,12 @@ enum Phase { OFFLINE, LOBBY, RACING }
 ## A ghost position, sent unreliably and often
 const MSG_STATE := 1
 
-## The counters a ranking is built from, sent whenever one of them moves
+## Everything a ranking is built from, the finish included. It is one message
+## rather than two on purpose: a separate "I am out" sent once and only once is
+## a single packet the whole board depends on, and a line that hiccups at that
+## moment leaves a cube standing in the maze forever on every other screen. This
+## one repeats, so a lost one costs a second rather than the race
 const MSG_PROGRESS := 2
-
-## One cube rode the elevator out
-const MSG_FINISH := 3
 
 ## Sent to everybody on arrival so the other machines can open a session back
 const MSG_HELLO := 4
@@ -83,6 +84,14 @@ const STATE_RATE := 1.0 / 15.0
 ## Seconds without a packet before a ghost is taken off the map. Long enough to
 ## sit through a map rebuild after a death, which sends nothing at all
 const GHOST_TIMEOUT := 8.0
+
+## Seconds between two knocks at the other cubes while the lobby is open
+const HELLO_INTERVAL := 2.0
+
+## Seconds between two counter packets when nothing about them has changed. One
+## a second per cube is nothing next to the ghost positions, and it is what puts
+## a board that drifted back in step on its own
+const PROGRESS_HEARTBEAT := 1.0
 
 var steam := SteamService.new()
 
@@ -120,6 +129,9 @@ var _clock_zeroed: bool = false
 ## Seconds until the next ghost packet goes out
 var _send_timer: float = 0.0
 
+## Seconds until the counters go out again whether they moved or not
+var _progress_timer: float = 0.0
+
 ## What was last sent about this cube, so a counter that has not moved does not
 ## cost a reliable packet every tick
 var _sent_progress: Dictionary = {}
@@ -127,6 +139,19 @@ var _sent_progress: Dictionary = {}
 ## The lobby state this machine last acted on. Steam repeats a data update for
 ## every key that changed, and the race must only be entered once
 var _acted_state: String = ""
+
+## Packets out and in since this lobby was joined. The race panel puts them on
+## screen, and they are the difference between "nothing is syncing" and knowing
+## which half of it went quiet: traffic out with none coming back is a line that
+## was never opened, traffic both ways is something further up
+var _sent: int = 0
+var _received: int = 0
+
+## Seconds until the next knock goes out to everybody in the lobby. A Steam
+## session has to be agreed to by both ends before anything crosses it, and the
+## first packets sent over an unopened one are thrown away — so the knocking is
+## done while people are still readying up rather than with the race already on
+var _hello_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -188,6 +213,10 @@ func _process(delta: float) -> void:
 	steam.poll()
 	_receive()
 
+	if phase == Phase.LOBBY:
+		_keep_sessions_warm(delta)
+		return
+
 	if phase != Phase.RACING:
 		return
 
@@ -195,8 +224,8 @@ func _process(delta: float) -> void:
 	if _send_timer <= 0.0:
 		_send_timer = STATE_RATE
 		_send_local_state()
-		_send_local_progress()
 
+	_send_local_progress(delta)
 	_drop_stale_ghosts()
 
 
@@ -606,15 +635,21 @@ func _on_join_requested(lobby: int, _friend: int) -> void:
 	join_lobby(lobby)
 
 
-## Every session has to be agreed to by both sides. Only cubes that are actually
-## in this lobby are let through
+## Every session has to be agreed to by both sides, and this is the one chance
+## to agree. Steam asks once per attempt — turn it down and the packets that
+## follow are dropped without another word, which is a race that silently never
+## syncs at all.
+##
+## It used to be turned down whenever the sender was not in the member list yet,
+## and that list arrives over the network like everything else: a cube that
+## started sending the moment it joined got refused by a host whose list was one
+## callback behind. Being in a lobby at all is enough of a reason to say yes
 func _on_session_request(remote: int) -> void:
-	_refresh_members()
+	if lobby_id == 0 or remote == 0:
+		return
 
-	for member in members:
-		if member["id"] == remote:
-			steam.accept_session(remote)
-			return
+	steam.accept_session(remote)
+	_refresh_members()
 
 
 ## The four settings, read back off the lobby. The host wrote them, so this is
@@ -659,6 +694,41 @@ func _greet_everyone() -> void:
 	_broadcast([MSG_HELLO], true)
 
 
+## Keeps knocking while the lobby fills up. Opening a Steam session takes a
+## round trip both ends have to agree to, and whatever is sent before that is
+## gone — so a race that starts on a cold line loses its first second of ghosts,
+## and one where a knock went missing never opens the line at all
+func _keep_sessions_warm(delta: float) -> void:
+	if members.size() < 2:
+		return
+
+	_hello_timer -= delta
+	if _hello_timer > 0.0:
+		return
+
+	_hello_timer = HELLO_INTERVAL
+	_greet_everyone()
+
+
+## How the lines to the other cubes are doing, for the race panel to show. This
+## is the one thing worth putting on screen when a race will not sync: packets
+## going out with nothing coming back is a line that never opened, and both
+## numbers climbing means the trouble is somewhere else entirely
+func link_report() -> Dictionary:
+	var open := 0
+
+	for id: int in runners:
+		if id != steam.id and steam.session_is_open(id):
+			open += 1
+
+	return {
+		"sent": _sent,
+		"received": _received,
+		"open": open,
+		"peers": maxi(runners.size() - 1, 0),
+	}
+
+
 func _enter_race() -> void:
 	if phase == Phase.RACING:
 		return
@@ -696,24 +766,29 @@ func _leave_race() -> void:
 ## build does not flicker into the corner of the maze first
 func _build_runners() -> void:
 	runners.clear()
+	_refresh_members()
 
 	for member in members:
-		runners[member["id"]] = {
-			"id": member["id"],
-			"name": member["name"],
-			"deaths": 0,
-			"items": 0,
-			"has_key": false,
-			"finished": false,
-			"time": 0.0,
-			"dead": false,
-			"placed": false,
-			"position": Vector3.ZERO,
-			"target": Vector3.ZERO,
-			"yaw": 0.0,
-			"target_yaw": 0.0,
-			"seen_at": _now(),
-		}
+		_add_runner(member)
+
+
+func _add_runner(member: Dictionary) -> void:
+	runners[member["id"]] = {
+		"id": member["id"],
+		"name": member["name"],
+		"deaths": 0,
+		"items": 0,
+		"has_key": false,
+		"finished": false,
+		"time": 0.0,
+		"dead": false,
+		"placed": false,
+		"position": Vector3.ZERO,
+		"target": Vector3.ZERO,
+		"yaw": 0.0,
+		"target_yaw": 0.0,
+		"seen_at": _now(),
+	}
 
 
 ## Where this cube is, sent to everybody else. The player is looked up rather
@@ -735,21 +810,32 @@ func _send_local_state() -> void:
 	_broadcast([MSG_STATE, player.global_position, yaw, dead], false)
 
 
-## The counters, sent only when one of them actually moved
-func _send_local_progress() -> void:
+## The counters, sent whenever one of them moved and once a second regardless.
+##
+## The heartbeat is what makes the board self healing. Sending only on change is
+## enough right up until one of those packets is the one that goes missing, and
+## the counter it carried is then wrong on somebody else's screen for the rest
+## of the race with nothing left to correct it
+func _send_local_progress(delta: float) -> void:
+	var me: Dictionary = runners.get(steam.id, {})
 	var progress := {
 		"deaths": GameState.deaths,
 		"items": GameState.items_collected,
 		"has_key": GameState.has_key,
+		"finished": not me.is_empty() and bool(me["finished"]),
+		"time": float(me.get("time", 0.0)),
 	}
 
 	_remember_local(progress)
+	_progress_timer -= delta
 
-	if progress == _sent_progress:
+	if progress == _sent_progress and _progress_timer > 0.0:
 		return
 
+	_progress_timer = PROGRESS_HEARTBEAT
 	_sent_progress = progress.duplicate()
-	_broadcast([MSG_PROGRESS, progress["deaths"], progress["items"], progress["has_key"]], true)
+	_broadcast([MSG_PROGRESS, progress["deaths"], progress["items"], progress["has_key"], \
+		progress["finished"], progress["time"]], true)
 	standings_updated.emit()
 
 
@@ -766,30 +852,66 @@ func _remember_local(values: Dictionary) -> void:
 	runner["seen_at"] = _now()
 
 
+## Every message carries the account that sent it as its first value. Steam
+## reports the sender alongside the packet as well, but under a key whose name
+## has moved between versions — and reading the wrong one hands back a zero that
+## matches nobody, so every packet is dropped and the race silently never syncs.
+## Writing it into the payload costs eight bytes and cannot be got wrong
 func _broadcast(message: Array, reliable: bool) -> void:
-	var payload := var_to_bytes(message)
+	var stamped: Array = [steam.id]
+	stamped.append_array(message)
+	var payload := var_to_bytes(stamped)
 
 	for member in members:
 		if member["id"] != steam.id:
 			steam.send(member["id"], payload, reliable)
+			_sent += 1
 
 
-## Empties the packet queue. Anything malformed or from an account that is not
-## in this lobby is dropped without a word
+## Empties the packet queue. Anything malformed, or from an account this machine
+## is not racing against, is dropped
 func _receive() -> void:
-	for packet: Dictionary in steam.receive():
-		var sender := int(packet.get("steam_id_remote", 0))
-		if not runners.has(sender):
+	for payload: PackedByteArray in steam.receive():
+		_received += 1
+
+		var message: Variant = bytes_to_var(payload)
+		if typeof(message) != TYPE_ARRAY or (message as Array).size() < 2:
 			continue
 
-		var message: Variant = bytes_to_var(packet.get("data", PackedByteArray()))
-		if typeof(message) != TYPE_ARRAY or (message as Array).is_empty():
-			continue
-
-		_handle(sender, message as Array)
+		var parts := message as Array
+		_handle(int(parts[0]), parts.slice(1))
 
 
+## True for an account this machine should be listening to, taking it on board
+## if it was missed.
+##
+## The runner list is built from the member list the moment the race starts, and
+## that member list arrives over the network like everything else. A machine
+## whose copy was one callback short at that exact moment would spend the whole
+## race throwing away everything one player sent, and nothing would ever put it
+## right — so a packet from somebody the lobby knows is reason enough
+func _is_racer(sender: int) -> bool:
+	if runners.has(sender):
+		return true
+
+	if not is_racing():
+		return false
+
+	for member in members:
+		if int(member["id"]) == sender:
+			_add_runner(member)
+			return true
+
+	return false
+
+
+## Everything that decides whether this packet is ours to act on lives here
+## rather than in the caller, so no route into it can reach the runner list with
+## an account that is not in it
 func _handle(sender: int, message: Array) -> void:
+	if sender == steam.id or message.is_empty() or not _is_racer(sender):
+		return
+
 	var runner: Dictionary = runners[sender]
 	runner["seen_at"] = _now()
 
@@ -798,8 +920,6 @@ func _handle(sender: int, message: Array) -> void:
 			_handle_state(runner, message)
 		MSG_PROGRESS:
 			_handle_progress(runner, message)
-		MSG_FINISH:
-			_handle_finish(runner, message)
 
 
 ## A ghost is moved to where the packet says over the next frames rather than
@@ -819,26 +939,23 @@ func _handle_state(runner: Dictionary, message: Array) -> void:
 		runner["yaw"] = runner["target_yaw"]
 
 
+## A cube that has reported itself out stays out. The heartbeat repeats the
+## finish for the rest of the race, so this arrives over and over — and a
+## finished runner must never be walked backwards by a packet that overtook it
 func _handle_progress(runner: Dictionary, message: Array) -> void:
-	if message.size() < 4:
+	if message.size() < 6:
 		return
 
 	runner["deaths"] = int(message[1])
 	runner["items"] = int(message[2])
 	runner["has_key"] = bool(message[3])
-	standings_updated.emit()
 
+	if bool(message[4]) and not bool(runner["finished"]):
+		runner["finished"] = true
+		runner["time"] = float(message[5])
+		runner["has_key"] = true
+		runner["dead"] = false
 
-func _handle_finish(runner: Dictionary, message: Array) -> void:
-	if message.size() < 5:
-		return
-
-	runner["finished"] = true
-	runner["time"] = float(message[1])
-	runner["deaths"] = int(message[2])
-	runner["items"] = int(message[3])
-	runner["has_key"] = true
-	runner["dead"] = false
 	standings_updated.emit()
 
 
@@ -855,7 +972,11 @@ func _drop_stale_ghosts() -> void:
 
 
 ## The elevator carried this cube out. The summary panel stays down in a race,
-## the standings take its place
+## the standings take its place.
+##
+## Nothing is sent from here. The finish is written into this machine's own
+## runner and the heartbeat carries it out on the next tick and every tick after
+## that, which is what makes it survive a line that stuttered at the wrong moment
 func _on_run_finished() -> void:
 	if not is_racing():
 		return
@@ -867,7 +988,7 @@ func _on_run_finished() -> void:
 		"items": GameState.items_collected,
 	})
 
-	_broadcast([MSG_FINISH, GameState.run_time, GameState.deaths, GameState.items_collected], true)
+	_progress_timer = 0.0
 	standings_updated.emit()
 
 
@@ -881,6 +1002,10 @@ func _reset() -> void:
 	members.clear()
 	runners.clear()
 	_sent_progress.clear()
+	_sent = 0
+	_received = 0
+	_hello_timer = 0.0
+	_progress_timer = 0.0
 
 
 func _now() -> float:
