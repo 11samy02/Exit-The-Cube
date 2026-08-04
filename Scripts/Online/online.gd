@@ -207,6 +207,9 @@ var paint := PaintState.new()
 ## Which side each account is on, worked out from the seed rather than sent
 var teams: Dictionary = {}
 
+## What each side is drawn in, rolled per round
+var team_colors: Array[Color] = []
+
 ## Where each account comes into the maze, one cell each and no two the same
 var spawns: Dictionary = {}
 
@@ -432,14 +435,28 @@ func team_of(account: int) -> int:
 ## twelve separate hues would say nothing about who is winning
 func color_of(account: int) -> Color:
 	if RaceRules.is_paint(settings):
-		return RaceRules.team_color(team_of(account))
+		return team_color(team_of(account))
 
 	return GhostField.ghost_color(account)
 
 
+## What a side is drawn in this round. Rolled once when the teams are drawn, so
+## every screen and every tile agrees without asking again
+func team_color(team: int) -> Color:
+	if team < 0 or team >= team_colors.size():
+		return Color.WHITE
+
+	return team_colors[team]
+
+
+## The mode this round is being played under
+func mode() -> RaceMode:
+	return RaceRules.mode_of(settings)
+
+
 ## Seconds left in the painting round, 0 once it is over
 func round_left() -> float:
-	return maxf(RaceRules.ROUND_SECONDS - GameState.run_time, 0.0)
+	return maxf(mode().round_seconds - GameState.run_time, 0.0)
 
 
 func round_ended() -> bool:
@@ -940,6 +957,7 @@ func _enter_race() -> void:
 func _draw_teams() -> void:
 	paint.clear()
 	teams.clear()
+	team_colors.clear()
 	spawns.clear()
 	_respawn_pool.clear()
 	_last_respawn = Vector2i(-1, -1)
@@ -951,7 +969,9 @@ func _draw_teams() -> void:
 	if not RaceRules.is_paint(settings):
 		return
 
-	teams = TeamDraw.teams_of(runners.keys(), RaceRules.team_count(settings), race_seed)
+	var sides := RaceRules.team_count(settings)
+	teams = TeamDraw.teams_of(runners.keys(), sides, race_seed)
+	team_colors = RaceRules.roll_team_colors(race_seed, sides)
 
 
 ## Hands out the starting cells once the maze exists. Called by the map, which
@@ -1109,7 +1129,7 @@ func _send_local_saws() -> void:
 ## countdown on screen is the same one it is actually serving rather than a
 ## second timer running alongside it and drifting
 func begin_penalty() -> void:
-	_back_at = _now() + RaceRules.DEATH_PENALTY_SECONDS
+	_back_at = _now() + mode().death_penalty_seconds
 
 
 ## Seconds until this cube is back on its feet, 0 while it is already standing
@@ -1459,6 +1479,7 @@ func _reset() -> void:
 	_sent_progress.clear()
 	paint.clear()
 	teams.clear()
+	team_colors.clear()
 	spawns.clear()
 	_respawn_pool.clear()
 	_last_respawn = Vector2i(-1, -1)

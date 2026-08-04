@@ -170,13 +170,13 @@ func kill(force: bool = false) -> void:
 ## death rather than five seconds later
 func _sit_out() -> void:
 	GameState.add_death()
-	Online.lose_tiles(RaceRules.DEATH_TILE_PENALTY)
+	Online.lose_tiles(Online.mode().death_tile_penalty)
 	Online.begin_penalty()
 
 	var spawner := get_tree().get_first_node_in_group("player_spawn") as PlayerSpawn
 	var lead := spawner.entrance_lead() if spawner != null else 0.0
 
-	await get_tree().create_timer(maxf(RaceRules.DEATH_PENALTY_SECONDS - lead, 0.1)).timeout
+	await get_tree().create_timer(maxf(Online.mode().death_penalty_seconds - lead, 0.1)).timeout
 	if not is_inside_tree():
 		return
 

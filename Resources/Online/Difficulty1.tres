@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="Difficulty" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Online/Rules/difficulty.gd" id="1_0f668"]
+
+[resource]
+script = ExtResource("1_0f668")
+label = "EASY"
+blurb = "a maze that still lets you double back"
+openness = 0.45
+glass_walls = false
+corridors_per_saw = 55.0
+speed = Vector2(0.6, 0.78)
+ai_saws = 0
+patrol = Vector2i(3, 8)
+corridors_per_item = 28.0

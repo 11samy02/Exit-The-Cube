@@ -128,7 +128,7 @@ func _redraw() -> void:
 	for cell: Vector2i in claims:
 		var claim: PaintState.Claim = claims[cell]
 		multi.set_instance_transform(at, Transform3D(Basis(), _world_of(cell)))
-		multi.set_instance_color(at, RaceRules.team_color(claim.team))
+		multi.set_instance_color(at, Online.team_color(claim.team))
 		at += 1
 
 

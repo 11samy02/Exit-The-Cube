@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="Difficulty" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Online/Rules/difficulty.gd" id="1_1nr7e"]
+
+[resource]
+script = ExtResource("1_1nr7e")
+label = "HARD"
+blurb = "dead ends, a lid on top, and blades that keep up with you"
+openness = 0.13
+roof = 0.35
+corridors_per_saw = 26.0
+speed = Vector2(0.9, 1.15)
+ai_saws = 3
+patrol = Vector2i(3, 12)
+spacing = 1
+corridors_per_item = 46.0

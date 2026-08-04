@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="RaceRulebook" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Online/Rules/difficulty.gd" id="1_ef6rj"]
+[ext_resource type="Resource" path="res://Resources/Online/Difficulty0.tres" id="2_g4vja"]
+[ext_resource type="Resource" path="res://Resources/Online/Difficulty1.tres" id="3_hr86s"]
+[ext_resource type="Resource" path="res://Resources/Online/Difficulty2.tres" id="4_am4ja"]
+[ext_resource type="Resource" path="res://Resources/Online/Difficulty3.tres" id="5_8ioc5"]
+[ext_resource type="Resource" path="res://Resources/Online/Difficulty4.tres" id="6_6v4b8"]
+[ext_resource type="Script" path="res://Scripts/Online/Rules/race_mode.gd" id="7_6abt6"]
+[ext_resource type="Resource" path="res://Resources/Online/Mode0_race.tres" id="8_pdvbs"]
+[ext_resource type="Resource" path="res://Resources/Online/Mode1_paint.tres" id="9_k2w5x"]
+[ext_resource type="Script" path="res://Scripts/Online/Rules/race_rulebook.gd" id="10_llhiw"]
+[ext_resource type="Script" path="res://Scripts/Online/Rules/map_shape.gd" id="11_hwwq0"]
+[ext_resource type="Resource" path="res://Resources/Online/Shape0.tres" id="12_eto7w"]
+[ext_resource type="Resource" path="res://Resources/Online/Shape1.tres" id="13_w3cqm"]
+[ext_resource type="Script" path="res://Scripts/Online/Rules/map_size.gd" id="14_nn00x"]
+[ext_resource type="Resource" path="res://Resources/Online/Size0.tres" id="15_peo4r"]
+[ext_resource type="Resource" path="res://Resources/Online/Size1.tres" id="16_2wqft"]
+[ext_resource type="Resource" path="res://Resources/Online/Size2.tres" id="17_ee8tk"]
+[ext_resource type="Resource" path="res://Resources/Online/Size3.tres" id="18_d7o78"]
+[ext_resource type="Resource" path="res://Resources/Online/Size4.tres" id="19_27ojj"]
+[ext_resource type="Resource" path="res://Resources/Online/Size5.tres" id="20_4lcmc"]
+
+[resource]
+script = ExtResource("10_llhiw")
+modes = Array[ExtResource("7_6abt6")]([ExtResource("8_pdvbs"), ExtResource("9_k2w5x")])
+sizes = Array[ExtResource("14_nn00x")]([ExtResource("15_peo4r"), ExtResource("16_2wqft"), ExtResource("17_ee8tk"), ExtResource("18_d7o78"), ExtResource("19_27ojj"), ExtResource("20_4lcmc")])
+shapes = Array[ExtResource("11_hwwq0")]([ExtResource("12_eto7w"), ExtResource("13_w3cqm")])
+difficulties = Array[ExtResource("1_ef6rj")]([ExtResource("2_g4vja"), ExtResource("3_hr86s"), ExtResource("4_am4ja"), ExtResource("5_8ioc5"), ExtResource("6_6v4b8")])

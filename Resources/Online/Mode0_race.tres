@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="RaceMode" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Online/Rules/race_mode.gd" id="1_aq73j"]
+
+[resource]
+script = ExtResource("1_aq73j")
+blurb = "same maze, same key, same exit. first one out wins"

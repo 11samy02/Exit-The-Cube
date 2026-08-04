@@ -195,7 +195,7 @@ func _draw_down_card() -> void:
 		return
 
 	_down_clock.text = "%d" % maxi(ceili(left), 1)
-	_down_cost.text = "%d tiles lost" % RaceRules.DEATH_TILE_PENALTY
+	_down_cost.text = "%d tiles lost" % Online.mode().death_tile_penalty
 
 
 ## Sticks a control to one corner and lets it size itself from there. Handing a
@@ -388,7 +388,7 @@ func _draw_teams() -> void:
 ## share is what says who is winning — a raw count means nothing until you know
 ## what the other numbers are
 func _build_team_row(team: int, held: int, share: float, mine: bool) -> Control:
-	var color := RaceRules.team_color(team)
+	var color := Online.team_color(team)
 
 	var frame := PanelContainer.new()
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -602,7 +602,7 @@ func _players_of(team: int) -> Array:
 
 
 func _build_result_team(place: int, team: int, held: int, share: float) -> Control:
-	var color := RaceRules.team_color(team)
+	var color := Online.team_color(team)
 	var frame := OnlineUi.panel(color, 0.35)
 
 	var row := HBoxContainer.new()

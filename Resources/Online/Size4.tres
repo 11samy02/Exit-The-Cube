@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="MapSize" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Online/Rules/map_size.gd" id="1_y6yvc"]
+
+[resource]
+script = ExtResource("1_y6yvc")
+label = "VERY LARGE"
+cells = 64
+blurb = "you will forget where you came in"
