@@ -59,12 +59,20 @@ const DEATH_PENALTY_SECONDS := 5.0
 
 ## The spheres a painting round hands out.
 ##
-## Two of the eight are left out rather than reworded. The arrow points at what
-## you still need and the echo draws the way there, and both of those mean the
-## key and the exit — neither of which a painting round has. They would be a
-## pickup that visibly does nothing, which is worse than one that never drops
+## Three of the eight are left out, for two different reasons.
+##
+## The arrow points at what you still need and the echo draws the way there, and
+## both of those mean the key and the exit — neither of which this mode has. They
+## would be a pickup that visibly does nothing.
+##
+## The spiral is left out because it changes the level rather than the player.
+## Stopping every blade makes the maze safer to be in, and a maze that is safer
+## to be in is safer for whoever happens to be standing in it — which in a team
+## round is as likely to be the other side as it is to be you. What is left all
+## does something to the cube holding it: it moves faster, it survives a blade,
+## it opens a way through, or it takes somebody out
 const PAINT_ITEMS: Array[String] = [
-	"freeze", "glass_opener", "rush", "saw_paths", "shield", "speed",
+	"glass_opener", "rush", "saw_paths", "shield", "speed",
 ]
 
 ## How wide the maze gets, in cells. A round map takes half of it as its radius,
