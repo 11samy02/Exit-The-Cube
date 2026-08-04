@@ -13,6 +13,10 @@ const TITLE_SCENE := "res://Scenes/Ui/title_screen.tscn"
 ## How often the line under the title is swapped for another one
 const QUIP_INTERVAL := 7.0
 
+## How far a lobby row's contents sit inside its own edge, so the text does not
+## run into the border the button draws around itself
+const ROW_PADDING := 20
+
 @onready var _layout: VBoxContainer = %Layout
 
 var _quip: Label = null
@@ -248,22 +252,49 @@ func _on_lobby_list(lobbies: Array) -> void:
 	rows[0].grab_focus()
 
 
+## One lobby, built out of parts rather than as one long button caption.
+##
+## A caption is what decides a button's smallest possible width, and a host with
+## a long name and a spelled out ruleset made that wider than the panel it lives
+## in — which, with sideways scrolling switched off, simply cut the row off at
+## both ends. Laying it out gives the name room to be clipped on its own while
+## the count on the right stays where it belongs
 func _build_lobby_row(lobby: Dictionary) -> Button:
 	var host := String(lobby["host"])
 	var title := String(lobby["title"])
 	var players := int(lobby["players"])
 
 	var row := OnlineUi.button("")
-	row.custom_minimum_size = Vector2(0, 64)
-	row.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	row.text = "%s   ·   %s   ·   %d / %d" % [
-		host.to_upper() if not host.is_empty() else "SOMEBODY",
-		title if not title.is_empty() else "RACE",
-		players,
-		Online.MAX_PLAYERS,
-	]
+	row.custom_minimum_size = Vector2(0, 66)
 	row.disabled = players >= Online.MAX_PLAYERS
 	row.pressed.connect(_on_lobby_picked.bind(int(lobby["id"])))
+
+	var line := HBoxContainer.new()
+	line.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	line.offset_left = ROW_PADDING
+	line.offset_right = -ROW_PADDING
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	line.add_theme_constant_override("separation", 16)
+	row.add_child(line)
+
+	var name_label := OnlineUi.body(host.to_upper() if not host.is_empty() else "SOMEBODY", 22)
+	name_label.clip_text = true
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.add_child(name_label)
+
+	var rules := OnlineUi.body(title if not title.is_empty() else "RACE", 20, OnlineUi.MUTED)
+	rules.clip_text = true
+	rules.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	rules.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.add_child(rules)
+
+	var count := OnlineUi.body("%d / %d" % [players, Online.MAX_PLAYERS], 22, OnlineUi.ACCENT)
+	count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	count.custom_minimum_size = Vector2(90, 0)
+	line.add_child(count)
+
 	return row
 
 

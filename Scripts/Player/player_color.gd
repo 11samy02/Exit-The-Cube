@@ -20,8 +20,15 @@ class_name PlayerColor
 var color: Color
 
 
+## A cube rolls its own colour offline, where it is nobody else's business.
+##
+## In a race it takes the one worked out from the account instead, because that
+## same colour is already the ghost the others see, the dot beside the name in
+## the lobby and the row on the board. Rolling here as well would mean every
+## player looked like one colour to themselves and another to everybody else
 func _ready() -> void:
-	color = Color.from_hsv(randf(), saturation, value)
+	color = GhostField.ghost_color(Online.steam.id) if Online.is_racing() \
+		else Color.from_hsv(randf(), saturation, value)
 	mesh.material_override = _build_material()
 
 

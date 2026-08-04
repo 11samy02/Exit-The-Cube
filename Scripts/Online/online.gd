@@ -76,6 +76,27 @@ const MSG_PROGRESS := 2
 ## Sent to everybody on arrival so the other machines can open a session back
 const MSG_HELLO := 4
 
+## Where the blades nearest this cube are standing, so that watching somebody
+## shows the maze they are actually in.
+##
+## Only the ones close enough to matter go out, by their place in the spawn
+## order. Every machine built the same level from the same seed, so blade number
+## nine is the same blade on every screen — which means a position and an index
+## is enough to put a watcher's own copy of it exactly where the watched player
+## sees it, without sending anything about the route it runs
+const MSG_SAWS := 5
+
+## How many blades around a cube are worth telling the others about. Beyond a
+## dozen they are around a corner and behind a wall
+const SAWS_TRACKED := 12
+
+## How far a blade may be and still be sent, in meters
+const SAW_RANGE := 26.0
+
+## How often the blade positions go out. Slower than the ghosts: a watcher is
+## looking at a whole corridor rather than reading one cube's footwork
+const SAW_RATE := 1.0 / 10.0
+
 ## How often a cube tells the others where it is. Fifteen a second is enough for
 ## a ghost the interpolation smooths anyway, and it keeps twelve players inside
 ## a couple of kilobytes a second
@@ -131,6 +152,9 @@ var _send_timer: float = 0.0
 
 ## Seconds until the counters go out again whether they moved or not
 var _progress_timer: float = 0.0
+
+## Seconds until the nearby blade positions go out again
+var _saw_timer: float = 0.0
 
 ## Accounts Steam could not open a line to, by what it said about it. Shown on
 ## the race panel, because a player who cannot be reached at all is not a bug in
@@ -231,6 +255,11 @@ func _process(delta: float) -> void:
 	if _send_timer <= 0.0:
 		_send_timer = STATE_RATE
 		_send_local_state()
+
+	_saw_timer -= delta
+	if _saw_timer <= 0.0:
+		_saw_timer = SAW_RATE
+		_send_local_saws()
 
 	_send_local_progress(delta)
 	_drop_stale_ghosts()
@@ -803,6 +832,9 @@ func _add_runner(member: Dictionary) -> void:
 		"target": Vector3.ZERO,
 		"yaw": 0.0,
 		"target_yaw": 0.0,
+		"item": "",
+		"saws": [],
+		"saws_at": 0.0,
 		"seen_at": _now(),
 	}
 
@@ -840,6 +872,7 @@ func _send_local_progress(delta: float) -> void:
 		"has_key": GameState.has_key,
 		"finished": not me.is_empty() and bool(me["finished"]),
 		"time": float(me.get("time", 0.0)),
+		"item": _held_item(),
 	}
 
 	_remember_local(progress)
@@ -851,8 +884,53 @@ func _send_local_progress(delta: float) -> void:
 	_progress_timer = PROGRESS_HEARTBEAT
 	_sent_progress = progress.duplicate()
 	_broadcast([MSG_PROGRESS, progress["deaths"], progress["items"], progress["has_key"], \
-		progress["finished"], progress["time"]], true)
+		progress["finished"], progress["time"], progress["item"]], true)
 	standings_updated.emit()
+
+
+## Where the blades around this cube are, by their place in the spawn order.
+##
+## The order is the same on every machine because the level was built from the
+## same seed, so an index and a position is all a watcher needs to move its own
+## copy of that blade to where this player sees it. Sending every blade would be
+## two hundred positions on a gigantic map; the ones out of sight are the ones
+## nobody watching this cube could see anyway
+func _send_local_saws() -> void:
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	var spawner := get_tree().get_first_node_in_group(&"saw_spawner") as SawSpawner
+
+	if player == null or spawner == null:
+		return
+
+	var here := player.global_position
+	var near: Array = []
+
+	for at in range(spawner.spawned_saws.size()):
+		var saw: Node3D = spawner.spawned_saws[at]
+		if not is_instance_valid(saw):
+			continue
+
+		var away := here.distance_to(saw.global_position)
+		if away <= SAW_RANGE:
+			near.append({"at": at, "away": away, "position": saw.global_position})
+
+	near.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a["away"]) < float(b["away"]))
+
+	var payload: Array = []
+	for entry: Dictionary in near.slice(0, SAWS_TRACKED):
+		payload.append(int(entry["at"]))
+		payload.append(entry["position"])
+
+	_broadcast([MSG_SAWS, payload], false)
+
+
+## What this cube is carrying, by name, empty for an open hand. It goes out with
+## the counters so that watching somebody shows what they have to play with,
+## which is half of what makes watching them worth anything
+func _held_item() -> String:
+	var item: ItemData = ItemSystem.held_item
+	return item.display_name if item != null else ""
 
 
 ## Writes something into this machine's own runner. The local cube is not drawn
@@ -937,6 +1015,18 @@ func _handle(sender: int, message: Array) -> void:
 			_handle_state(runner, message)
 		MSG_PROGRESS:
 			_handle_progress(runner, message)
+		MSG_SAWS:
+			_handle_saws(runner, message)
+
+
+## Keeps the blade positions of every cube, so that whoever is watched can have
+## their maze put on screen the moment somebody switches to them
+func _handle_saws(runner: Dictionary, message: Array) -> void:
+	if message.size() < 2 or not (message[1] is Array):
+		return
+
+	runner["saws"] = message[1]
+	runner["saws_at"] = _now()
 
 
 ## A ghost is moved to where the packet says over the next frames rather than
@@ -966,6 +1056,9 @@ func _handle_progress(runner: Dictionary, message: Array) -> void:
 	runner["deaths"] = int(message[1])
 	runner["items"] = int(message[2])
 	runner["has_key"] = bool(message[3])
+
+	if message.size() > 6:
+		runner["item"] = String(message[6])
 
 	if bool(message[4]) and not bool(runner["finished"]):
 		runner["finished"] = true
@@ -1023,6 +1116,7 @@ func _reset() -> void:
 	_received = 0
 	_hello_timer = 0.0
 	_progress_timer = 0.0
+	_saw_timer = 0.0
 	_failed_links.clear()
 
 

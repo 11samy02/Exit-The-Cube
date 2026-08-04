@@ -46,6 +46,7 @@ var _lobby_button: Button = null
 var _lobby_note: Label = null
 var _watch_bar: Control = null
 var _watch_name: Label = null
+var _watch_item: Label = null
 var _watch_back: Button = null
 
 var _tick: float = 0.0
@@ -232,11 +233,18 @@ func _build_watch_bar() -> void:
 	previous.pressed.connect(_watch_step.bind(-1))
 	row.add_child(previous)
 
+	var watched := VBoxContainer.new()
+	watched.custom_minimum_size = Vector2(340, 0)
+	watched.add_theme_constant_override("separation", 0)
+	row.add_child(watched)
+
 	_watch_name = OnlineUi.body("", 26, OnlineUi.TEXT)
-	_watch_name.custom_minimum_size = Vector2(320, 0)
 	_watch_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_watch_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(_watch_name)
+	watched.add_child(_watch_name)
+
+	_watch_item = OnlineUi.body("", 18, OnlineUi.MUTED)
+	_watch_item.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	watched.add_child(_watch_item)
 
 	var next := OnlineUi.button(">", 70)
 	next.pressed.connect(_watch_step.bind(1))
@@ -344,10 +352,13 @@ func _progress_label(runner: Dictionary) -> Label:
 	if bool(runner["finished"]):
 		return OnlineUi.body(OnlineUi.format_time(float(runner["time"])), 19, OnlineUi.READY)
 
-	if bool(runner["has_key"]):
-		return OnlineUi.body("KEY  ·  %d dead" % int(runner["deaths"]), 19, OnlineUi.ACCENT)
+	var deaths := int(runner["deaths"])
+	var counted := "%d death" % deaths if deaths == 1 else "%d deaths" % deaths
 
-	return OnlineUi.body("%d dead" % int(runner["deaths"]), 19, OnlineUi.MUTED)
+	if bool(runner["has_key"]):
+		return OnlineUi.body("KEY  ·  %s" % counted, 19, OnlineUi.ACCENT)
+
+	return OnlineUi.body(counted, 19, OnlineUi.MUTED)
 
 
 ## A row of the strip. Only this machine's own gets a filled frame, twelve lit
@@ -517,8 +528,15 @@ func _show_watched() -> void:
 		return
 
 	var runner: Dictionary = Online.runners[watching]
-	_watch_name.text = "%s  ·  %d deaths" % [String(runner["name"]).to_upper(), int(runner["deaths"])]
+	var deaths := int(runner["deaths"])
+	var held := String(runner.get("item", ""))
+
+	_watch_name.text = "%s  ·  %s" % [
+		String(runner["name"]).to_upper(),
+		"%d death" % deaths if deaths == 1 else "%d deaths" % deaths,
+	]
 	_watch_name.label_settings.font_color = GhostField.ghost_color(watching)
+	_watch_item.text = "carrying  %s" % held.to_upper() if not held.is_empty() else "empty handed"
 
 
 func _on_lobby_pressed() -> void:

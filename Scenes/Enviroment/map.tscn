@@ -109,7 +109,7 @@ map_generator = NodePath("../Map Generator")
 holder = NodePath("../../Objects")
 player_spawner = NodePath("../Player Spawner")
 
-[node name="Saw Spawner" type="Node" parent="Scripts" unique_id=1497803928 node_paths=PackedStringArray("map_generator", "holder", "player_spawner", "key_spawner", "elevator_spawner")]
+[node name="Saw Spawner" type="Node" parent="Scripts" unique_id=1497803928 node_paths=PackedStringArray("map_generator", "holder", "player_spawner", "key_spawner", "elevator_spawner") groups=["saw_spawner"]]
 script = ExtResource("6_wsdu4")
 saw_scene = ExtResource("7_iuuh5")
 map_generator = NodePath("../Map Generator")
