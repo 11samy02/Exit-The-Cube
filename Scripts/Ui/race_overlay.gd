@@ -299,10 +299,17 @@ func _draw_link() -> void:
 		return
 
 	var open := int(report["open"])
-	_link.text = "net  %d up  %d down  ·  %d / %d linked" % [
+	var failed := int(report["failed"])
+	var line := "net  %d up  %d down  ·  %d / %d linked" % [
 		int(report["sent"]), int(report["received"]), open, peers,
 	]
-	_link.label_settings.font_color = OnlineUi.MUTED if open == peers else OnlineUi.WAITING
+
+	if failed > 0:
+		line += "  ·  %d unreachable" % failed
+
+	_link.text = line
+	_link.label_settings.font_color = OnlineUi.MUTED if int(report["received"]) > 0 \
+		else OnlineUi.WAITING
 
 
 ## The place is drawn in the podium colors and the row this machine is on burns

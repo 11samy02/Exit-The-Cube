@@ -30,6 +30,13 @@ const SEND_UNRELIABLE := 0
 ## Packets that have to arrive, used for everything that is counted
 const SEND_RELIABLE := 2
 
+## The same two for SteamNetworkingMessages, which numbers them differently. The
+## extra bit switches Nagle off: it holds a small packet back for a few
+## milliseconds hoping to bundle it with the next one, and a ghost position is
+## exactly the kind of small packet that is worthless once it is late
+const MESSAGE_UNRELIABLE := 1
+const MESSAGE_RELIABLE := 9
+
 ## The channel all game traffic runs on
 const CHANNEL := 0
 
@@ -97,6 +104,7 @@ func start() -> bool:
 
 	if running:
 		_do("allowP2PPacketRelay", [true])
+		_do("initRelayNetworkAccess", [])
 
 	return running
 
@@ -243,9 +251,25 @@ func friends() -> Array:
 	return found
 
 
+## Sends the same bytes down both of Steam's peer to peer paths.
+##
+## SteamNetworkingMessages is the one Valve maintains: it finds a route on its
+## own, falls back to relaying through Steam's own servers when two players
+## cannot reach each other directly, and it is what a packet sent to your own
+## account comes back through. The old SteamNetworking P2P underneath it is
+## deprecated, and on this machine a packet sent to self over it never arrived
+## at all while the newer one did.
+##
+## Both are used because a race that does not sync is worth more traffic than it
+## is worth elegance, and there is no way to tell from here which of the two a
+## given player's network will let through. Every message the game sends can be
+## acted on twice with no harm — a position is a position and a counter is a
+## counter, so a duplicate changes nothing
 func send(target: int, payload: PackedByteArray, reliable: bool) -> void:
-	var kind := SEND_RELIABLE if reliable else SEND_UNRELIABLE
-	_do("sendP2PPacket", [target, payload, kind, CHANNEL])
+	_do("sendMessageToUser", [target, payload,
+		MESSAGE_RELIABLE if reliable else MESSAGE_UNRELIABLE, CHANNEL])
+	_do("sendP2PPacket", [target, payload,
+		SEND_RELIABLE if reliable else SEND_UNRELIABLE, CHANNEL])
 
 
 ## Every payload that arrived since the last call, oldest first, as raw bytes.
@@ -260,6 +284,27 @@ func receive() -> Array:
 	if not running:
 		return payloads
 
+	_drain_messages(payloads)
+	_drain_packets(payloads)
+	return payloads
+
+
+## Whatever came in over SteamNetworkingMessages. It hands back a whole array at
+## once with the bytes under "payload" and the sender under "identity"
+func _drain_messages(payloads: Array) -> void:
+	var messages: Variant = _ask("receiveMessagesOnChannel", [CHANNEL, MAX_PACKETS_PER_FRAME], [])
+	if not (messages is Array):
+		return
+
+	for message: Variant in messages as Array:
+		if message is Dictionary:
+			var bytes := _payload_of(message as Dictionary)
+			if not bytes.is_empty():
+				payloads.append(bytes)
+
+
+## Whatever came in over the old P2P queue, which is drained one packet at a time
+func _drain_packets(payloads: Array) -> void:
 	var size := int(_ask("getAvailableP2PPacketSize", [CHANNEL], 0))
 	var guard := MAX_PACKETS_PER_FRAME
 
@@ -273,8 +318,6 @@ func receive() -> Array:
 
 		payloads.append(bytes)
 		size = int(_ask("getAvailableP2PPacketSize", [CHANNEL], 0))
-
-	return payloads
 
 
 ## The bytes out of whatever shape this GodotSteam hands a packet back in. The
@@ -299,11 +342,15 @@ func session_is_open(account: int) -> bool:
 	return bool(state.get("connection_active", false))
 
 
+## Agrees to talk to that account on both paths. Steam asks once per path and a
+## refusal is final, so both are always answered
 func accept_session(account: int) -> void:
+	_do("acceptSessionWithUser", [account])
 	_do("acceptP2PSessionWithUser", [account])
 
 
 func close_session(account: int) -> void:
+	_do("closeSessionWithUser", [account])
 	_do("closeP2PSessionWithUser", [account])
 
 

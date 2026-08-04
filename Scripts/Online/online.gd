@@ -132,6 +132,11 @@ var _send_timer: float = 0.0
 ## Seconds until the counters go out again whether they moved or not
 var _progress_timer: float = 0.0
 
+## Accounts Steam could not open a line to, by what it said about it. Shown on
+## the race panel, because a player who cannot be reached at all is not a bug in
+## the ranking and should not be read as one
+var _failed_links: Dictionary = {}
+
 ## What was last sent about this cube, so a counter that has not moved does not
 ## cost a reliable packet every tick
 var _sent_progress: Dictionary = {}
@@ -204,6 +209,8 @@ func _listen() -> void:
 	steam.listen(&"lobby_match_list", _on_lobby_match_list)
 	steam.listen(&"join_requested", _on_join_requested)
 	steam.listen(&"p2p_session_request", _on_session_request)
+	steam.listen(&"network_messages_session_request", _on_session_request)
+	steam.listen(&"network_messages_session_failed", _on_session_failed)
 
 
 ## Steamworks answers through callbacks and the packets pile up in a queue, both
@@ -652,6 +659,14 @@ func _on_session_request(remote: int) -> void:
 	_refresh_members()
 
 
+## Steam gave up on a line to somebody. Worth saying out loud rather than
+## leaving a race that quietly never syncs: this is the one message that names
+## the reason, and it is the difference between a firewall and a bug in here
+func _on_session_failed(reason: int, remote: int, state: int, message: String) -> void:
+	push_warning("Online: no line to %d (reason %d, state %d) %s" % [remote, reason, state, message])
+	_failed_links[remote] = message if not message.is_empty() else "reason %d" % reason
+
+
 ## The four settings, read back off the lobby. The host wrote them, so this is
 ## also how the host's own copy is kept honest after a reconnect
 func _read_lobby_data() -> void:
@@ -726,6 +741,7 @@ func link_report() -> Dictionary:
 		"received": _received,
 		"open": open,
 		"peers": maxi(runners.size() - 1, 0),
+		"failed": _failed_links.size(),
 	}
 
 
@@ -914,6 +930,7 @@ func _handle(sender: int, message: Array) -> void:
 
 	var runner: Dictionary = runners[sender]
 	runner["seen_at"] = _now()
+	_failed_links.erase(sender)
 
 	match int(message[0]):
 		MSG_STATE:
@@ -1006,6 +1023,7 @@ func _reset() -> void:
 	_received = 0
 	_hello_timer = 0.0
 	_progress_timer = 0.0
+	_failed_links.clear()
 
 
 func _now() -> float:
