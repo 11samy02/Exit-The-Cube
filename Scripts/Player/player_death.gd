@@ -171,16 +171,19 @@ func kill(force: bool = false) -> void:
 func _sit_out() -> void:
 	GameState.add_death()
 	Online.lose_tiles(RaceRules.DEATH_TILE_PENALTY)
+	Online.begin_penalty()
 
-	await get_tree().create_timer(RaceRules.DEATH_PENALTY_SECONDS).timeout
+	var spawner := get_tree().get_first_node_in_group("player_spawn") as PlayerSpawn
+	var lead := spawner.entrance_lead() if spawner != null else 0.0
+
+	await get_tree().create_timer(maxf(RaceRules.DEATH_PENALTY_SECONDS - lead, 0.1)).timeout
 	if not is_inside_tree():
 		return
 
-	var spawner := get_tree().get_first_node_in_group("player_spawn") as PlayerSpawn
+	is_dead = false
+
 	if spawner != null:
 		spawner.respawn()
-
-	is_dead = false
 
 
 ## Leaves the cube on the walls around that point, in its own color. The map

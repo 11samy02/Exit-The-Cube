@@ -57,6 +57,16 @@ const DEATH_TILE_PENALTY := 10
 ## Seconds a player sits out after dying, before the cube is put back
 const DEATH_PENALTY_SECONDS := 5.0
 
+## The spheres a painting round hands out.
+##
+## Two of the eight are left out rather than reworded. The arrow points at what
+## you still need and the echo draws the way there, and both of those mean the
+## key and the exit — neither of which a painting round has. They would be a
+## pickup that visibly does nothing, which is worse than one that never drops
+const PAINT_ITEMS: Array[String] = [
+	"freeze", "glass_opener", "rush", "saw_paths", "shield", "speed",
+]
+
 ## How wide the maze gets, in cells. A round map takes half of it as its radius,
 ## which lands it on roughly the same walk
 const SIZES := [
@@ -316,7 +326,7 @@ static func build_level(settings: Dictionary, race_seed: int) -> MapData:
 	_apply_maze(level, size, shape, rules)
 	_apply_spawns(level, size)
 	_apply_saws(level, size, corridors, rules)
-	_apply_items(level, corridors, rules)
+	_apply_items(level, corridors, rules, is_paint(rolled))
 	_apply_glass(level, corridors, rules)
 	_apply_seeds(level, race_seed)
 
@@ -385,8 +395,13 @@ static func _apply_saws(level: MapData, size: int, corridors: float, rules: Dict
 ## Spheres are spaced by corridor as well, so a long map hands out more of them
 ## rather than the same handful spread thinner. The floor is there for the
 ## smallest maps, where the spacing alone would leave barely any
-static func _apply_items(level: MapData, corridors: float, rules: Dictionary) -> void:
-	level.item_pool = []
+static func _apply_items(level: MapData, corridors: float, rules: Dictionary, paint: bool) -> void:
+	var pool: Array[String] = []
+
+	if paint:
+		pool.assign(PAINT_ITEMS)
+
+	level.item_pool = pool
 	level.item_count = clampi(int(round(corridors / float(rules["corridors_per_item"]))), \
 		MIN_ITEMS, MAX_ITEMS)
 	level.item_min_distance = 4

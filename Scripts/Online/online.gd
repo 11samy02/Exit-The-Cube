@@ -124,6 +124,19 @@ const MSG_UNPAINT := 7
 ## not need a packet each time, and a handful in one message is the same packet
 const PAINT_RATE := 1.0 / 6.0
 
+## One cube caught another while the cat was up.
+##
+## It has to be a message rather than a collision because the other players are
+## drawings here — a position arrives, a cube is put there, and nothing about it
+## is a body anything can run into. So the one who caught somebody says so, and
+## the machine that owns that cube is the one that kills it. Which is also the
+## honest way round: nobody else gets to decide when your cube dies
+const MSG_HIT := 8
+
+## How close a rainbow cube has to get to count as having caught somebody, in
+## meters. A little over one cell, so a pass down the same corridor lands it
+const HIT_RANGE := 2.4
+
 ## How often a cube tells the others where it is. Fifteen a second is enough for
 ## a ghost the interpolation smooths anyway, and it keeps twelve players inside
 ## a couple of kilobytes a second
@@ -203,6 +216,11 @@ var _paint_timer: float = 0.0
 
 ## True once the clock ran out and the result is on screen
 var _round_ended: bool = false
+
+## When this cube is allowed back into the maze, in seconds since the game
+## started. Zero while it is standing. The panel counts down against it, so the
+## number on screen and the wait the cube is actually serving are the same one
+var _back_at: float = 0.0
 
 ## Accounts Steam could not open a line to, by what it said about it. Shown on
 ## the race panel, because a player who cannot be reached at all is not a bug in
@@ -314,6 +332,7 @@ func _process(delta: float) -> void:
 
 	if is_painting():
 		_tick_paint(delta)
+		_tick_hunt()
 		_tick_round()
 
 
@@ -1057,6 +1076,23 @@ func _send_local_saws() -> void:
 	_broadcast([MSG_SAWS, payload], false)
 
 
+## Starts the wait a death costs. Called by the cube that burst, so that the
+## countdown on screen is the same one it is actually serving rather than a
+## second timer running alongside it and drifting
+func begin_penalty() -> void:
+	_back_at = _now() + RaceRules.DEATH_PENALTY_SECONDS
+
+
+## Seconds until this cube is back on its feet, 0 while it is already standing
+func penalty_left() -> float:
+	return maxf(_back_at - _now(), 0.0) if _back_at > 0.0 else 0.0
+
+
+## Called by the cube once it is back, so nothing keeps counting down at it
+func end_penalty() -> void:
+	_back_at = 0.0
+
+
 ## Takes a tile for this cube's side, if it is not already ours. Called by the
 ## paint field whenever the player steps onto a new cell
 func paint_cell(cell: Vector2i) -> void:
@@ -1092,6 +1128,56 @@ func lose_tiles(count: int) -> void:
 
 	_broadcast([MSG_UNPAINT, giving], true)
 	paint_changed.emit()
+
+
+## While the cat is up, anybody on another side who comes within reach is told
+## they have been caught.
+##
+## Only players on other teams. Running through your own side at speed is how a
+## team covers ground, and a rainbow cube that took its own people out with it
+## would make the item something you hope nobody on your team picks up
+func _tick_hunt() -> void:
+	if not _cat_is_up():
+		return
+
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null:
+		return
+
+	var mine := team_of(steam.id)
+
+	for id: int in runners:
+		if id == steam.id or team_of(id) == mine:
+			continue
+
+		var runner: Dictionary = runners[id]
+		if not bool(runner["placed"]) or bool(runner["dead"]):
+			continue
+
+		if player.global_position.distance_to(runner["position"] as Vector3) <= HIT_RANGE:
+			_broadcast([MSG_HIT, id], true)
+
+
+## True while the rainbow is running on this cube. Read off the item system
+## rather than kept as a flag here, so it cannot say yes a moment after the
+## effect has already let go
+func _cat_is_up() -> bool:
+	for effect: ItemEffect in ItemSystem.active_effects:
+		if effect is RushEffect:
+			return true
+
+	return false
+
+
+## Somebody caught this cube with the cat. The kill happens here, on the machine
+## that owns the cube, rather than being asserted from the other end
+func _handle_hit(message: Array) -> void:
+	if message.size() < 2 or int(message[1]) != steam.id:
+		return
+
+	var death := get_tree().get_first_node_in_group("player_death") as PlayerDeath
+	if death != null and not death.is_dead:
+		death.kill(true)
 
 
 ## Sends the tiles taken since the last tick, all in one message
@@ -1245,6 +1331,8 @@ func _handle(sender: int, message: Array) -> void:
 			_handle_paint(runner, message)
 		MSG_UNPAINT:
 			_handle_unpaint(runner, message)
+		MSG_HIT:
+			_handle_hit(message)
 
 
 ## Keeps the blade positions of every cube, so that whoever is watched can have

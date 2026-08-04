@@ -48,6 +48,9 @@ var _watch_bar: Control = null
 var _watch_name: Label = null
 var _watch_item: Label = null
 var _watch_back: Button = null
+var _down_card: PanelContainer = null
+var _down_clock: Label = null
+var _down_cost: Label = null
 
 var _tick: float = 0.0
 
@@ -65,6 +68,7 @@ func _ready() -> void:
 	_build_standings()
 	_build_panel()
 	_build_watch_bar()
+	_build_down_card()
 	_apply_theme()
 
 	Online.standings_updated.connect(_redraw)
@@ -86,6 +90,9 @@ func _on_round_over() -> void:
 
 
 func _process(delta: float) -> void:
+	if Online.is_painting():
+		_draw_down_card()
+
 	_tick -= delta
 	if _tick <= 0.0:
 		_tick = TICK
@@ -124,6 +131,45 @@ func _build_standings() -> void:
 	column.add_child(OnlineUi.gap(4))
 	_link = OnlineUi.body("", 15, OnlineUi.MUTED)
 	column.add_child(_link)
+
+
+## The card that comes up while this cube is sitting out a death.
+##
+## A player who bursts and then waits five seconds looking at an empty corridor
+## has no way of telling a penalty from a hang. This says how long is left, what
+## it cost, and that the cube is coming back
+func _build_down_card() -> void:
+	var frame := OnlineUi.panel(OnlineUi.WAITING, 0.9)
+	frame.visible = false
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(frame)
+	_pin(frame, 0.5, 0.5, Control.GROW_DIRECTION_BOTH, Control.GROW_DIRECTION_BOTH, Vector2.ZERO)
+	_down_card = frame
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 2)
+	frame.add_child(column)
+
+	_down_clock = OnlineUi.heading("", 78, OnlineUi.TEXT)
+	_down_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(_down_clock)
+
+	_down_cost = OnlineUi.body("", 20, OnlineUi.WAITING)
+	_down_cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(_down_cost)
+
+
+## Counts the wait down, and says what the death took. The number is read off
+## the same clock the cube is serving, so it cannot drift away from it
+func _draw_down_card() -> void:
+	var left := Online.penalty_left()
+	_down_card.visible = left > 0.0
+
+	if not _down_card.visible:
+		return
+
+	_down_clock.text = "%d" % maxi(ceili(left), 1)
+	_down_cost.text = "−%d TILES" % RaceRules.DEATH_TILE_PENALTY
 
 
 ## Sticks a control to one corner and lets it size itself from there. Handing a
@@ -275,7 +321,7 @@ func _build_watch_bar() -> void:
 ## the menu theme has to be put on each of the three roots by hand. Without it
 ## the race panel comes up in the plain grey Godot buttons
 func _apply_theme() -> void:
-	for root: Control in [_strip, _panel_root, _watch_bar]:
+	for root: Control in [_strip, _panel_root, _watch_bar, _down_card]:
 		root.theme = OnlineUi.THEME
 
 

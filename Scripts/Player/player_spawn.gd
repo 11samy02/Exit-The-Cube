@@ -68,6 +68,16 @@ func _ready() -> void:
 	_run()
 
 
+## How long the entrance takes before the cube answers to the player again.
+##
+## A respawn that is started when the penalty runs out hands control back a
+## second after the countdown reached zero, which makes the number on screen a
+## lie. Whoever is timing the penalty asks for this and starts the entrance that
+## much early instead, so the two land together
+func entrance_lead() -> float:
+	return gather_duration + form_duration if Settings.spawn_animation else 0.0
+
+
 ## Puts the cube back after a death that did not tear the level down, which is
 ## how a round that has to keep running handles one. The body is carried back to
 ## where it came in and the whole entrance is played again from there, so a
