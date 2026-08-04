@@ -17,14 +17,14 @@ extends Node3D
 ## Put in a group so the race panel can read the score without a path
 const GROUP := &"paint_field"
 
-## How far above the floor the paint sits. Enough to clear the tile it covers,
+## How far above the floor the paint sits. Enough to clear the surface it covers,
 ## little enough that it still reads as being on it rather than hovering
-const PAINT_HEIGHT := 0.02
+const PAINT_HEIGHT := 0.03
 
-## How much of the cell one patch of paint covers. Slightly under one keeps a
-## grid of dark lines between the tiles, so a painted floor still reads as a
-## floor rather than as a flat sheet of colour
-const PAINT_SIZE := 0.92
+## What share of the cell one patch of paint covers. Slightly under the whole
+## thing keeps a grid of dark lines between the tiles, so a painted floor still
+## reads as a floor rather than as a flat sheet of colour
+const PAINT_SHARE := 0.92
 
 ## Seconds between two rebuilds of the drawing. Paint arrives a few tiles at a
 ## time from everybody at once, and redrawing on each one would rebuild the whole
@@ -65,17 +65,22 @@ func _process(delta: float) -> void:
 
 
 ## One flat quad per painted cell, coloured per instance. Unshaded so a tile
-## reads as its team's colour in a corridor the lights never reach
+## reads as its team's colour in a corridor the lights never reach.
+##
+## The size comes off the grid rather than being a number written here. A cell
+## is two units across in this map and a patch built for a one unit cell covers
+## a quarter of the floor it is supposed to be painting
 func _build_mesh() -> void:
+	var across := _grid.cell_size.x if _grid != null else 1.0
+
 	var quad := QuadMesh.new()
-	quad.size = Vector2.ONE * PAINT_SIZE
+	quad.size = Vector2.ONE * across * PAINT_SHARE
 	quad.orientation = PlaneMesh.FACE_Y
 
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.vertex_color_use_as_albedo = true
-	material.emission_enabled = true
-	material.emission_energy_multiplier = 0.6
+	material.vertex_color_is_srgb = true
 	quad.material = material
 
 	var multi := MultiMesh.new()
@@ -127,10 +132,15 @@ func _redraw() -> void:
 		at += 1
 
 
-## The middle of that cell, lifted just clear of the floor
+## The top face of that floor tile.
+##
+## map_to_local hands back the middle of the cell, not its surface — the floor
+## block is centred on that point and reaches half a cell above it. Painting at
+## the point itself buries the whole thing inside the block, which is exactly as
+## visible as not painting at all
 func _world_of(cell: Vector2i) -> Vector3:
 	var local := _grid.map_to_local(Vector3i(cell.x, 0, cell.y))
-	local.y += PAINT_HEIGHT
+	local.y += _grid.cell_size.y * 0.5 + PAINT_HEIGHT
 	return _grid.to_global(local)
 
 
