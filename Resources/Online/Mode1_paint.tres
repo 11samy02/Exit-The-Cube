@@ -14,3 +14,4 @@ item_pool = Array[String](["glass_opener", "rush", "saw_paths", "shield", "speed
 round_seconds = 300.0
 death_tile_penalty = 10
 death_penalty_seconds = 5.0
+saw_revive_seconds = 20.0

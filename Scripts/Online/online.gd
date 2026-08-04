@@ -454,6 +454,12 @@ func mode() -> RaceMode:
 	return RaceRules.mode_of(settings)
 
 
+## Seconds a broken blade stays down, 0 outside a race or in a mode that keeps
+## them broken
+func saw_revive_seconds() -> float:
+	return mode().saw_revive_seconds if is_racing() else 0.0
+
+
 ## Seconds left in the painting round, 0 once it is over
 func round_left() -> float:
 	return maxf(mode().round_seconds - GameState.run_time, 0.0)

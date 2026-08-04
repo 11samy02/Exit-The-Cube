@@ -36,3 +36,8 @@ class_name RaceMode
 ## What dying costs: tiles taken back, and seconds spent waiting
 @export var death_tile_penalty: int = 0
 @export var death_penalty_seconds: float = 0.0
+
+## Seconds a blade broken by the heart stays down before it winds itself back
+## up. 0 leaves it gone for good, which is what a run to an exit wants — in a
+## round on a clock the maze would otherwise be swept clean of blades
+@export var saw_revive_seconds: float = 0.0
