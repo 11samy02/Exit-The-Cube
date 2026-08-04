@@ -164,8 +164,10 @@ func _fade_of(ghost: Node3D) -> Callable:
 	var material := mesh.material_override as StandardMaterial3D
 	var tint: Color = label.modulate
 
+	var solid := Online.is_painting()
+
 	return func(amount: float) -> void:
-		material.albedo_color = Color(tint.r, tint.g, tint.b, GHOST_ALPHA * amount)
+		material.albedo_color = Color(tint.r, tint.g, tint.b, (1.0 if solid else GHOST_ALPHA) * amount)
 		material.emission_energy_multiplier = GHOST_EMISSION * amount
 		label.modulate = Color(tint.r, tint.g, tint.b, amount)
 
@@ -214,7 +216,7 @@ func _show_name(ghost: Node3D, yaw: float) -> void:
 ## One transparent cube with a name over it. Built in code because it is only
 ## ever three nodes and every one of them is colored per player anyway
 func _build_ghost(runner: Dictionary) -> Node3D:
-	var color := ghost_color(int(runner["id"]))
+	var color := Online.color_of(int(runner["id"]))
 
 	var ghost := Node3D.new()
 	add_child(ghost)
@@ -243,12 +245,20 @@ func _build_ghost(runner: Dictionary) -> Node3D:
 
 
 ## Unshaded on purpose. A ghost lit like the rest of the level disappears into
-## the dark corridors it is supposed to be seen glowing down
+## the dark corridors it is supposed to be seen glowing down.
+##
+## In a mode where the others are in the maze with you rather than running their
+## own copy of it, they are drawn solid. A see-through cube says "this player is
+## somewhere else"; in a team round they are on the same floor, fighting over the
+## same tiles, and they should look like it
 func _ghost_material(color: Color) -> StandardMaterial3D:
+	var solid := Online.is_painting()
+
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.albedo_color = Color(color.r, color.g, color.b, GHOST_ALPHA)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED if solid \
+		else BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = color if solid else Color(color.r, color.g, color.b, GHOST_ALPHA)
 	material.emission_enabled = true
 	material.emission = color
 	material.emission_energy_multiplier = GHOST_EMISSION

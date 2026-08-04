@@ -68,6 +68,35 @@ func _ready() -> void:
 	_run()
 
 
+## Puts the cube back after a death that did not tear the level down, which is
+## how a round that has to keep running handles one. The body is carried back to
+## where it came in and the whole entrance is played again from there, so a
+## respawn looks like a spawn rather than a cube blinking back into a corridor
+func respawn() -> void:
+	var spawner := get_tree().get_first_node_in_group("player_spawner") as PlayerSpawner
+	var body := movement.body
+
+	if spawner != null and not spawner.spawn_points.is_empty():
+		body.global_position = spawner.cell_to_world(spawner.spawn_points[0])
+
+	body.velocity = Vector3.ZERO
+	mesh.scale = Vector3.ONE
+
+	var field := get_tree().get_first_node_in_group(PaintField.GROUP) as PaintField
+	if field != null:
+		field.forget_last_cell()
+
+	if Settings.spawn_animation:
+		_hold()
+	else:
+		mesh.visible = true
+		movement.input_enabled = true
+		movement.set_physics_process(true)
+		animator.set_process(true)
+
+	_run()
+
+
 ## Takes the cube out of the level before anything can be seen of it, the body
 ## keeps hanging in the air until the swarm has delivered it
 func _hold() -> void:

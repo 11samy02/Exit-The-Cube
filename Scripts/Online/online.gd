@@ -36,6 +36,12 @@ signal race_launched
 ## A runner died, took a sphere, or made it out
 signal standings_updated
 
+## A tile changed hands, anywhere on the map
+signal paint_changed
+
+## The painting round ran out of time
+signal round_over
+
 const MAP_SCENE := "res://Scenes/Enviroment/map.tscn"
 const LOBBY_SCENE := "res://Scenes/Ui/lobby_screen.tscn"
 const TITLE_SCENE := "res://Scenes/Ui/title_screen.tscn"
@@ -45,13 +51,16 @@ const TITLE_SCENE := "res://Scenes/Ui/title_screen.tscn"
 ## and naming them up here would be a circle neither script could compile out of
 const GHOST_FIELD := "res://Scripts/Online/ghost_field.gd"
 const RACE_OVERLAY := "res://Scripts/Ui/race_overlay.gd"
+const PAINT_FIELD := "res://Scripts/Online/paint_field.gd"
 
 
 ## How many cubes fit in one maze
 const MAX_PLAYERS := 12
 
-## How few it can be run with. A race needs somebody to be ahead of
-const MIN_PLAYERS := 2
+## How few it can be run with. One is allowed on purpose: a lobby of one is how
+## the whole thing gets tested, and a mode that refuses to open until somebody
+## else turns up cannot be looked at alone
+const MIN_PLAYERS := 1
 
 ## What the lobby browser filters on, so the list is this game and not every
 ## lobby the app id ever opened
@@ -104,6 +113,16 @@ const SAW_RANGE := 26.0
 ## How often the blade positions go out. Slower than the ghosts: a watcher is
 ## looking at a whole corridor rather than reading one cube's footwork
 const SAW_RATE := 1.0 / 10.0
+
+## Tiles this cube has just taken, and tiles a death has just cost it. Both are
+## sent reliably: a lost position is one frame of a ghost, a lost tile is a hole
+## in the floor that nothing ever fills in
+const MSG_PAINT := 6
+const MSG_UNPAINT := 7
+
+## How often claimed tiles go out. A cube crossing a cell every few frames does
+## not need a packet each time, and a handful in one message is the same packet
+const PAINT_RATE := 1.0 / 6.0
 
 ## How often a cube tells the others where it is. Fifteen a second is enough for
 ## a ghost the interpolation smooths anyway, and it keeps twelve players inside
@@ -163,6 +182,27 @@ var _progress_timer: float = 0.0
 
 ## Seconds until the nearby blade positions go out again
 var _saw_timer: float = 0.0
+
+## Who owns which tile of the floor. Empty outside the painting mode
+var paint := PaintState.new()
+
+## Which side each account is on, worked out from the seed rather than sent
+var teams: Dictionary = {}
+
+## Where each account comes into the maze, one cell each and no two the same
+var spawns: Dictionary = {}
+
+## Tiles this cube has taken, oldest first, with the stamp each was taken under.
+## A death gives the last few of them back, so the order matters
+var _my_tiles: Array = []
+
+## Claims waiting to go out together on the next tick
+var _pending_paint: Array = []
+
+var _paint_timer: float = 0.0
+
+## True once the clock ran out and the result is on screen
+var _round_ended: bool = false
 
 ## Accounts Steam could not open a line to, by what it said about it. Shown on
 ## the race panel, because a player who cannot be reached at all is not a bug in
@@ -272,6 +312,10 @@ func _process(delta: float) -> void:
 	_send_local_progress(delta)
 	_drop_stale_ghosts()
 
+	if is_painting():
+		_tick_paint(delta)
+		_tick_round()
+
 
 ## Opens a lobby with this machine as its host
 func host_lobby() -> void:
@@ -342,6 +386,36 @@ func in_lobby() -> bool:
 
 func is_racing() -> bool:
 	return phase == Phase.RACING
+
+
+## True while a painting round is on. Every part of the paint mode asks this
+## rather than the mode setting, so nothing of it can run in a lobby or a race
+func is_painting() -> bool:
+	return phase == Phase.RACING and RaceRules.is_paint(settings)
+
+
+## Which side that account is on, 0 when the mode has no teams
+func team_of(account: int) -> int:
+	return int(teams.get(account, 0))
+
+
+## The colour that account is drawn in. In a team mode everybody on a side is
+## the same colour on purpose — a round is read by where the colours are, and
+## twelve separate hues would say nothing about who is winning
+func color_of(account: int) -> Color:
+	if RaceRules.is_paint(settings):
+		return RaceRules.team_color(team_of(account))
+
+	return GhostField.ghost_color(account)
+
+
+## Seconds left in the painting round, 0 once it is over
+func round_left() -> float:
+	return maxf(RaceRules.ROUND_SECONDS - GameState.run_time, 0.0)
+
+
+func round_ended() -> bool:
+	return _round_ended
 
 
 ## The level the race is run on. The map scene builds from this instead of from
@@ -451,6 +525,10 @@ func attach_to_map(map: Node) -> void:
 
 	map.add_child(_build(GHOST_FIELD))
 	map.add_child(_build(RACE_OVERLAY))
+
+	if RaceRules.is_paint(settings):
+		map.add_child(_build(PAINT_FIELD))
+
 	_zero_clock()
 
 
@@ -807,11 +885,13 @@ func _enter_race() -> void:
 		return
 
 	phase = Phase.RACING
+	set_process(true)
 	_level = RaceRules.build_level(settings, race_seed)
 	_clock_zeroed = false
 	_send_timer = 0.0
 	_sent_progress.clear()
 	_build_runners()
+	_draw_teams()
 	set_ready(false)
 
 	Levels.stop()
@@ -821,6 +901,41 @@ func _enter_race() -> void:
 
 	race_launched.emit()
 	Transition.change_scene(MAP_SCENE)
+
+
+## Splits the room into sides and clears the floor. Both the teams and the cells
+## each player comes in on are worked out from the accounts and the seed, so
+## every machine reaches the same answer without a word being sent about it.
+##
+## The spawn cells need the maze, which is not built yet at this point — they are
+## filled in by the map once it has one, through spawn_cells_from
+func _draw_teams() -> void:
+	paint.clear()
+	teams.clear()
+	spawns.clear()
+	_my_tiles.clear()
+	_pending_paint.clear()
+	_paint_timer = 0.0
+	_round_ended = false
+
+	if not RaceRules.is_paint(settings):
+		return
+
+	teams = TeamDraw.teams_of(runners.keys(), RaceRules.team_count(settings), race_seed)
+
+
+## Hands out the starting cells once the maze exists. Called by the map, which
+## is the first thing that knows where the corridors are
+func spawn_cells_from(cells: Array, size: int) -> void:
+	if not RaceRules.is_paint(settings) or not spawns.is_empty():
+		return
+
+	spawns = TeamDraw.spawns_of(teams, RaceRules.team_count(settings), cells, size)
+
+
+## Where this cube comes in, or a cell of -1 when the mode does not place people
+func spawn_cell() -> Vector2i:
+	return spawns.get(steam.id, Vector2i(-1, -1))
 
 
 ## One runner per cube in the lobby, all of them on zero. A ghost is only drawn
@@ -942,6 +1057,98 @@ func _send_local_saws() -> void:
 	_broadcast([MSG_SAWS, payload], false)
 
 
+## Takes a tile for this cube's side, if it is not already ours. Called by the
+## paint field whenever the player steps onto a new cell
+func paint_cell(cell: Vector2i) -> void:
+	if not is_painting() or _round_ended:
+		return
+
+	var stamp := GameState.run_time
+
+	if not paint.claim(cell, team_of(steam.id), steam.id, stamp):
+		return
+
+	_my_tiles.append([cell, stamp])
+	_pending_paint.append([cell, stamp])
+	paint_changed.emit()
+
+
+## Gives back the last few tiles this cube took, the price of dying. Only the
+## ones still standing in our colour come off — anything painted over since
+## belongs to whoever took it
+func lose_tiles(count: int) -> void:
+	if not is_painting():
+		return
+
+	var giving: Array = []
+
+	while _my_tiles.size() > 0 and giving.size() < count:
+		var last: Array = _my_tiles.pop_back()
+		if paint.release(last[0] as Vector2i, steam.id, float(last[1])):
+			giving.append(last)
+
+	if giving.is_empty():
+		return
+
+	_broadcast([MSG_UNPAINT, giving], true)
+	paint_changed.emit()
+
+
+## Sends the tiles taken since the last tick, all in one message
+func _tick_paint(delta: float) -> void:
+	_paint_timer -= delta
+	if _paint_timer > 0.0 or _pending_paint.is_empty():
+		return
+
+	_paint_timer = PAINT_RATE
+	_broadcast([MSG_PAINT, team_of(steam.id), _pending_paint.duplicate()], true)
+	_pending_paint.clear()
+
+
+## Ends the round when the clock runs out. Every machine has its own copy of the
+## same clock, started at the same moment, so nobody has to be told
+func _tick_round() -> void:
+	if _round_ended or round_left() > 0.0:
+		return
+
+	_round_ended = true
+	GameState.is_running = false
+	round_over.emit()
+
+
+func _handle_paint(runner: Dictionary, message: Array) -> void:
+	if message.size() < 3 or not (message[2] is Array):
+		return
+
+	var team := int(message[1])
+	var changed := false
+
+	for entry: Variant in message[2] as Array:
+		if entry is Array and (entry as Array).size() >= 2:
+			var pair := entry as Array
+			changed = paint.claim(pair[0] as Vector2i, team, int(runner["id"]), \
+				float(pair[1])) or changed
+
+	if changed:
+		paint_changed.emit()
+
+
+func _handle_unpaint(runner: Dictionary, message: Array) -> void:
+	if message.size() < 2 or not (message[1] is Array):
+		return
+
+	var changed := false
+
+	for entry: Variant in message[1] as Array:
+		if entry is Array and (entry as Array).size() >= 2:
+			var pair := entry as Array
+			changed = paint.release(pair[0] as Vector2i, int(runner["id"]), \
+				float(pair[1])) or changed
+
+	if changed:
+		paint_changed.emit()
+
+
 ## What this cube is carrying, by name, empty for an open hand. It goes out with
 ## the counters so that watching somebody shows what they have to play with,
 ## which is half of what makes watching them worth anything
@@ -1034,6 +1241,10 @@ func _handle(sender: int, message: Array) -> void:
 			_handle_progress(runner, message)
 		MSG_SAWS:
 			_handle_saws(runner, message)
+		MSG_PAINT:
+			_handle_paint(runner, message)
+		MSG_UNPAINT:
+			_handle_unpaint(runner, message)
 
 
 ## Keeps the blade positions of every cube, so that whoever is watched can have
@@ -1129,6 +1340,12 @@ func _reset() -> void:
 	members.clear()
 	runners.clear()
 	_sent_progress.clear()
+	paint.clear()
+	teams.clear()
+	spawns.clear()
+	_my_tiles.clear()
+	_pending_paint.clear()
+	_round_ended = false
 	_sent = 0
 	_received = 0
 	_hello_timer = 0.0

@@ -68,8 +68,21 @@ func _ready() -> void:
 	_apply_theme()
 
 	Online.standings_updated.connect(_redraw)
+	Online.paint_changed.connect(_redraw)
+	Online.round_over.connect(_on_round_over)
 	GameState.run_finished.connect(_on_finished)
 	_redraw()
+
+
+## The clock ran out on a painting round. Everybody sees it at once, nobody rode
+## an elevator, and the panel is the same one a finished race puts up
+func _on_round_over() -> void:
+	if _finished:
+		return
+
+	_finished = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_show_panel()
 
 
 func _process(delta: float) -> void:
@@ -267,14 +280,64 @@ func _apply_theme() -> void:
 
 
 func _redraw() -> void:
-	var standings := Online.standings()
-	_draw_strip(standings)
+	if Online.is_painting():
+		_draw_teams()
+	else:
+		_draw_strip(Online.standings())
 
 	if _panel_root.visible:
-		_draw_panel(standings)
+		_draw_panel(Online.standings())
 
 	if _spectating:
 		_show_watched()
+
+
+## The corner board of a painting round: how much floor each side holds, and how
+## long is left. Which cube is ahead of which matters far less here than which
+## colour the map is turning
+func _draw_teams() -> void:
+	for child in _standings.get_children():
+		_standings.remove_child(child)
+		child.queue_free()
+
+	var counts := Online.paint.tally()
+	var total := maxi(Online.paint.claims.size(), 1)
+	var mine := Online.team_of(Online.steam.id)
+
+	for team in range(RaceRules.team_count(Online.settings)):
+		var held := int(counts.get(team, 0))
+		_standings.add_child(_build_team_row(team, held, float(held) / float(total), team == mine))
+
+	_strip_note.text = OnlineUi.format_time(Online.round_left())
+	_draw_link()
+
+
+## One side: its colour, its name, how much of the painted floor is theirs. The
+## share is what says who is winning — a raw count means nothing until you know
+## what the other numbers are
+func _build_team_row(team: int, held: int, share: float, mine: bool) -> Control:
+	var color := RaceRules.team_color(team)
+
+	var frame := PanelContainer.new()
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_theme_stylebox_override("panel", _row_style(color, mine))
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	frame.add_child(row)
+
+	var dot := ColorRect.new()
+	dot.color = color
+	dot.custom_minimum_size = Vector2(14, 14)
+	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(dot)
+
+	row.add_child(_column(OnlineUi.body(RaceRules.team_name(team) + ("  ·  YOU" if mine else ""), \
+		20, color), 0))
+	row.add_child(OnlineUi.body("%d  ·  %d%%" % [held, roundi(share * 100.0)], 19, OnlineUi.MUTED))
+
+	return frame
 
 
 ## The corner strip. The place, the name and where that cube has got to — the
@@ -384,12 +447,15 @@ func _draw_panel(standings: Array) -> void:
 		_panel_rows.remove_child(child)
 		child.queue_free()
 
-	for runner: Dictionary in standings:
-		_panel_rows.add_child(_build_panel_row(runner))
+	if Online.is_painting():
+		_draw_paint_result()
+	else:
+		for runner: Dictionary in standings:
+			_panel_rows.add_child(_build_panel_row(runner))
 
-	_spectate_button.visible = Online.anyone_running()
+	_spectate_button.visible = Online.anyone_running() and not Online.is_painting()
 	_lobby_button.visible = true
-	_lobby_note.text = "the others keep racing without you" if Online.anyone_running() else ""
+	_lobby_note.text = _lobby_hint()
 
 
 func _build_panel_row(runner: Dictionary) -> Control:
@@ -416,6 +482,98 @@ func _build_panel_row(runner: Dictionary) -> Control:
 	row.add_child(_column(OnlineUi.body(str(int(runner["items"])), 22), 100))
 
 	return frame
+
+
+## How a painting round ended: every side by how much floor it holds, and under
+## it every player by how much of that they laid down themselves.
+##
+## The two are worth keeping apart. A side wins on the floor it holds at the
+## whistle, which is a team result and nothing to do with who worked hardest —
+## a player can paint half the map and lose it all to the other side in the last
+## minute. The per player count is what they actually did
+func _draw_paint_result() -> void:
+	var counts := Online.paint.tally()
+	var sides: Array = []
+
+	for team in range(RaceRules.team_count(Online.settings)):
+		sides.append({"team": team, "held": int(counts.get(team, 0))})
+
+	sides.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a["held"]) > int(b["held"]))
+
+	var total := maxi(Online.paint.claims.size(), 1)
+
+	for at in range(sides.size()):
+		var side: Dictionary = sides[at]
+		_panel_rows.add_child(_build_result_team(at + 1, int(side["team"]), int(side["held"]), \
+			float(side["held"]) / float(total)))
+
+		for runner: Dictionary in _players_of(int(side["team"])):
+			_panel_rows.add_child(_build_result_player(runner))
+
+
+## Everybody on that side, the one who painted the most first
+func _players_of(team: int) -> Array:
+	var found: Array = []
+
+	for id: int in Online.runners:
+		if Online.team_of(id) == team:
+			var runner: Dictionary = Online.runners[id].duplicate()
+			runner["painted"] = int(Online.paint.painted_total.get(id, 0))
+			runner["held"] = Online.paint.held_by(id)
+			found.append(runner)
+
+	found.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a["painted"]) > int(b["painted"]))
+
+	return found
+
+
+func _build_result_team(place: int, team: int, held: int, share: float) -> Control:
+	var color := RaceRules.team_color(team)
+	var frame := OnlineUi.panel(color, 0.35)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	frame.add_child(row)
+
+	row.add_child(_column(OnlineUi.heading(str(place), 26, color), 60))
+	row.add_child(_column(OnlineUi.heading(RaceRules.team_name(team), 26, color), 0))
+	row.add_child(_column(OnlineUi.body("%d tiles" % held, 22), 150))
+	row.add_child(_column(OnlineUi.body("%d%%" % roundi(share * 100.0), 22, color), 100))
+
+	return frame
+
+
+func _build_result_player(runner: Dictionary) -> Control:
+	var mine := int(runner["id"]) == Online.steam.id
+	var deaths := int(runner["deaths"])
+
+	var frame := PanelContainer.new()
+	frame.add_theme_stylebox_override("panel", _row_style(OnlineUi.MUTED, mine))
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	frame.add_child(row)
+
+	row.add_child(_column(OnlineUi.body("", 20), 60))
+	row.add_child(_column(OnlineUi.body(String(runner["name"]).to_upper(), 21, \
+		Color.WHITE if mine else OnlineUi.TEXT), 0))
+	row.add_child(_column(OnlineUi.body("%d painted" % int(runner["painted"]), 20, \
+		OnlineUi.MUTED), 150))
+	row.add_child(_column(OnlineUi.body("%d death" % deaths if deaths == 1 \
+		else "%d deaths" % deaths, 20, OnlineUi.MUTED), 100))
+
+	return frame
+
+
+## The line under the buttons. A painting round is over for everybody at the
+## same moment, so there is nobody left to leave behind and nothing to say
+func _lobby_hint() -> String:
+	if Online.is_painting() or not Online.anyone_running():
+		return ""
+
+	return "the others keep racing without you"
 
 
 ## Gold, silver and bronze for the podium, plain text for everybody else
@@ -452,9 +610,13 @@ func _show_panel() -> void:
 	_watch_bar.visible = false
 	_spectating = false
 
-	var rank := Online.local_rank()
-	_panel_title.text = _title_for(rank)
-	_panel_comment.text = Quips.pick("online_result", OnlineQuips.result_pool(rank, Online.finisher_count()))
+	if Online.is_painting():
+		_panel_title.text = _paint_title()
+		_panel_comment.text = "five minutes, one floor, and this is what it looks like"
+	else:
+		var rank := Online.local_rank()
+		_panel_title.text = _title_for(rank)
+		_panel_comment.text = Quips.pick("online_result", 			OnlineQuips.result_pool(rank, Online.finisher_count()))
 
 	_redraw()
 
@@ -464,6 +626,16 @@ func _show_panel() -> void:
 		_lobby_button.grab_focus()
 
 	_drop_in()
+
+
+## Who took the floor, from the point of view of the player reading it
+func _paint_title() -> String:
+	var winner := Online.paint.leader()
+
+	if winner < 0:
+		return "A DEAD HEAT"
+
+	return "YOUR TEAM TOOK IT" if winner == Online.team_of(Online.steam.id) 		else "%s TOOK IT" % RaceRules.team_name(winner)
 
 
 func _title_for(rank: int) -> String:

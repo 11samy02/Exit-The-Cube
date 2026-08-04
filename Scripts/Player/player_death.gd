@@ -148,10 +148,39 @@ func kill(force: bool = false) -> void:
 	screen_shake.shake(shake_strength)
 	_flash()
 
+	if Online.is_painting():
+		await _sit_out()
+		return
+
 	await get_tree().create_timer(reload_delay).timeout
 	GameState.add_death()
 	Quips.report_death(GameState.deaths, survived)
 	Transition.reload_scene()
+
+
+## What dying costs in a painting round.
+##
+## The level is not rebuilt. A round is five minutes with everybody dying in it
+## repeatedly, and tearing the maze down and putting it back each time would
+## spend most of the round on loading screens — worse, it would reset the blades
+## for one player and not the others. The cube simply sits out its penalty and is
+## put back where it came in.
+##
+## The tiles go first so that the others see the hole appear at the moment of the
+## death rather than five seconds later
+func _sit_out() -> void:
+	GameState.add_death()
+	Online.lose_tiles(RaceRules.DEATH_TILE_PENALTY)
+
+	await get_tree().create_timer(RaceRules.DEATH_PENALTY_SECONDS).timeout
+	if not is_inside_tree():
+		return
+
+	var spawner := get_tree().get_first_node_in_group("player_spawn") as PlayerSpawn
+	if spawner != null:
+		spawner.respawn()
+
+	is_dead = false
 
 
 ## Leaves the cube on the walls around that point, in its own color. The map

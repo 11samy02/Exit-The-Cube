@@ -154,7 +154,7 @@ min_distance_to_player = 3
 item_count = 256
 min_distance = 5
 
-[node name="Player Spawner" type="Node" parent="Scripts" unique_id=506162328 node_paths=PackedStringArray("map_generator", "holder")]
+[node name="Player Spawner" type="Node" parent="Scripts" unique_id=506162328 node_paths=PackedStringArray("map_generator", "holder") groups=["player_spawner"]]
 script = ExtResource("12_1c076")
 player_scene = ExtResource("13_pl4yr")
 map_generator = NodePath("../Map Generator")

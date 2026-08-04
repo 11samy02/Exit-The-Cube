@@ -28,6 +28,7 @@ var _quip: Label = null
 var _slots: VBoxContainer = null
 var _ready_count: Label = null
 var _pickers: Dictionary = {}
+var _rule_rows: Dictionary = {}
 var _random_button: Button = null
 var _countdown: Label = null
 
@@ -211,6 +212,7 @@ func _build_rules() -> Control:
 	_add_rule(column, "size", "MAP SIZE")
 	_add_rule(column, "shape", "MAP SHAPE")
 	_add_rule(column, "difficulty", "DIFFICULTY")
+	_add_rule(column, "teams", "TEAMS")
 
 	column.add_child(OnlineUi.gap(4))
 	_random_button = OnlineUi.button("SURPRISE US")
@@ -220,15 +222,22 @@ func _build_rules() -> Control:
 	return frame
 
 
+## Keeps the label, the dropdown and the space under it together, so a setting
+## the chosen mode has no use for can be taken off the column as one piece
 func _add_rule(column: VBoxContainer, key: String, title: String) -> void:
-	column.add_child(OnlineUi.body(title, 20, OnlineUi.MUTED))
+	var label := OnlineUi.body(title, 20, OnlineUi.MUTED)
+	column.add_child(label)
 
 	var picker := OnlineUi.choice(RaceRules.labels_for(key), int(Online.settings.get(key, 0)), \
 		Online.is_host)
 	picker.item_selected.connect(_on_rule_picked.bind(key))
 	column.add_child(picker)
-	column.add_child(OnlineUi.gap(6))
+
+	var spacer := OnlineUi.gap(6)
+	column.add_child(spacer)
+
 	_pickers[key] = picker
+	_rule_rows[key] = [label, picker, spacer]
 
 
 func _build_actions() -> void:
@@ -296,7 +305,15 @@ func _show_rules() -> void:
 		if picker.selected != at:
 			picker.selected = at
 
+	_show_rule("teams", RaceRules.is_paint(Online.settings))
 	_random_button.disabled = not Online.is_host
+
+
+## Hides a setting the chosen mode has no use for, label and all. A dropdown
+## that does nothing is worse than one that is not there
+func _show_rule(key: String, shown: bool) -> void:
+	for node: Node in _rule_rows.get(key, []):
+		(node as CanvasItem).visible = shown
 
 
 func _show_slots() -> void:

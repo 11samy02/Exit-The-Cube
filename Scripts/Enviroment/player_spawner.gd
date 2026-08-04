@@ -62,7 +62,7 @@ func spawn_player() -> void:
 
 	current_player_instance = player_scene.instantiate()
 	holder.add_child(current_player_instance)
-	current_player_instance.global_position = _cell_to_world(current_player_cell)
+	current_player_instance.global_position = cell_to_world(current_player_cell)
 
 
 ## Array.shuffle() ignores spawn_seed because it draws from the global rng
@@ -76,7 +76,7 @@ func _shuffle(cells: Array[Vector2i]) -> void:
 
 ## Converts a grid cell into a world position above the floor, the player
 ## drops down from there on its own
-func _cell_to_world(cell: Vector2i) -> Vector3:
+func cell_to_world(cell: Vector2i) -> Vector3:
 	var local_pos: Vector3 = map_generator.grid_map.map_to_local(Vector3i(cell.x, 0, cell.y))
 	local_pos.y = spawn_height
 	return map_generator.grid_map.to_global(local_pos)

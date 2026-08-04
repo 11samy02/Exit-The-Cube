@@ -75,6 +75,11 @@ class_name MapData
 ## Height the player is dropped in at, from there it falls onto the floor
 @export var player_spawn_height: float = 3.0
 
+## Whether the level has a key and a way out at all. A mode that is not about
+## reaching an exit wants neither: the key would be a pickup that does nothing
+## and the elevator would carry a player out of a round that is still running
+@export var with_exit: bool = true
+
 @export_group("Key")
 
 ## How many candidate cells to store, only one is used per spawn

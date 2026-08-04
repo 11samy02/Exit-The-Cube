@@ -10,15 +10,52 @@ extends RefCounted
 ## reach for the global rng or for a setting the player could change on their
 ## own, or the maze would drift apart between two players standing in it
 
-## The one mode there is so far. A second one only has to be added here and be
-## answered in whatever reads the id
+## What a lobby can play. A mode is an id the rest of the game answers to, so a
+## third one is an entry here plus whatever reads that id
 const MODES := [
 	{
 		"id": "race",
 		"label": "RACE",
 		"blurb": "same maze, same key, same exit. first one out wins",
 	},
+	{
+		"id": "paint",
+		"label": "PAINT",
+		"blurb": "teams, five minutes, and a floor that remembers who walked on it",
+	},
 ]
+
+## The id of the mode that is about painting the floor rather than leaving
+const MODE_PAINT := "paint"
+
+## How the room can be split up. Kept as its own setting rather than worked out
+## from how many turned up, because two teams of six and four teams of three are
+## different games and the room should get to say which one it is playing
+const TEAM_COUNTS := [
+	{"label": "2 TEAMS", "count": 2},
+	{"label": "3 TEAMS", "count": 3},
+	{"label": "4 TEAMS", "count": 4},
+]
+
+## What a team looks like. Far enough apart to be told from each other on a floor
+## in the dark, and none of them close to the violet the maze walls glow in
+const TEAM_COLORS := [
+	Color(0.16, 0.78, 1.00),
+	Color(1.00, 0.30, 0.55),
+	Color(1.00, 0.68, 0.16),
+	Color(0.42, 0.94, 0.42),
+]
+
+## Seconds a painting round lasts
+const ROUND_SECONDS := 300.0
+
+## How many of the tiles a player painted are taken back off them when they die.
+## It has to hurt enough to make a blade worth avoiding while still leaving the
+## bulk of a good run standing
+const DEATH_TILE_PENALTY := 10
+
+## Seconds a player sits out after dying, before the cube is put back
+const DEATH_PENALTY_SECONDS := 5.0
 
 ## How wide the maze gets, in cells. A round map takes half of it as its radius,
 ## which lands it on roughly the same walk
@@ -217,6 +254,12 @@ const RANDOM_RANGE := {
 		"salt": 307,
 		"blurb": "anything from stroll to hard. never nightmare",
 	},
+	"teams": {
+		"from": 0,
+		"to": 2,
+		"salt": 409,
+		"blurb": "two, three or four sides, decided when the round starts",
+	},
 }
 
 ## Ceilings on what a gigantic map may be filled with. The counts are worked out
@@ -268,6 +311,7 @@ static func build_level(settings: Dictionary, race_seed: int) -> MapData:
 	var level := MapData.new()
 	level.display_name = title_of(rolled)
 	level.world_seed = -1
+	level.with_exit = not is_paint(rolled)
 
 	_apply_maze(level, size, shape, rules)
 	_apply_spawns(level, size)
@@ -369,9 +413,29 @@ static func _apply_seeds(level: MapData, race_seed: int) -> void:
 	level.glass_wall_seed = race_seed + 6
 
 
-## The four numbers a fresh lobby opens on
+## The numbers a fresh lobby opens on
 static func default_settings() -> Dictionary:
-	return {"mode": 0, "size": 2, "shape": 0, "difficulty": 2}
+	return {"mode": 0, "size": 2, "shape": 0, "difficulty": 2, "teams": 0}
+
+
+## True while the lobby is set up to play the painting mode
+static func is_paint(settings: Dictionary) -> bool:
+	return String(mode_of(settings)["id"]) == MODE_PAINT
+
+
+## How many teams the room is split into
+static func team_count(settings: Dictionary) -> int:
+	return int(TEAM_COUNTS[index_of(settings, "teams", TEAM_COUNTS.size())]["count"])
+
+
+## The colour of one team, safe against a number that came off the network
+static func team_color(team: int) -> Color:
+	return TEAM_COLORS[clampi(team, 0, TEAM_COLORS.size() - 1)]
+
+
+## What a team goes by on screen
+static func team_name(team: int) -> String:
+	return ["CYAN", "PINK", "AMBER", "GREEN"][clampi(team, 0, 3)]
 
 
 ## The same four settings with every random one rolled into a real value. Only
@@ -401,6 +465,8 @@ static func options_for(key: String) -> Array:
 			return SIZES
 		"shape":
 			return SHAPES
+		"teams":
+			return TEAM_COUNTS
 
 	return DIFFICULTIES
 
@@ -486,12 +552,17 @@ static func difficulty_of(settings: Dictionary) -> Dictionary:
 ## setting still on random says so, which is the point of it being visible: the
 ## lobby is agreeing to a roll, not to a maze
 static func title_of(settings: Dictionary) -> String:
-	return "%s  ·  %s  ·  %s  ·  %s" % [
+	var parts: Array[String] = [
 		label_of(settings, "mode"),
 		label_of(settings, "size"),
 		label_of(settings, "shape"),
 		label_of(settings, "difficulty"),
 	]
+
+	if is_paint(settings):
+		parts.append(label_of(settings, "teams"))
+
+	return "  ·  ".join(parts)
 
 
 ## The short version, for a row in the lobby browser where there is no room

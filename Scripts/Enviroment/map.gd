@@ -58,14 +58,26 @@ func _ready() -> void:
 
 	if player_spawner != null:
 		player_spawner.generate_spawn_points()
+		Online.spawn_cells_from(map_generator.get_path_cells(), map_generator.width)
+
+		var mine := Online.spawn_cell()
+		if mine.x >= 0:
+			player_spawner.spawn_points = [mine]
+
 		player_spawner.spawn_player()
 
-	key_spawner.generate_spawn_points()
-	key_spawner.spawn_key()
+	var with_exit := map_data == null or map_data.with_exit
 
-	if elevator_spawner != null:
-		elevator_spawner.generate_spawn_points()
-		elevator_spawner.spawn_elevator()
+	if with_exit:
+		key_spawner.generate_spawn_points()
+		key_spawner.spawn_key()
+
+		if elevator_spawner != null:
+			elevator_spawner.generate_spawn_points()
+			elevator_spawner.spawn_elevator()
+	else:
+		saw_spawner.key_spawner = null
+		saw_spawner.elevator_spawner = null
 
 	if glass_wall_spawner != null:
 		glass_wall_spawner.spawn_walls()
