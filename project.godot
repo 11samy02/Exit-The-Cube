@@ -34,6 +34,7 @@ ItemSystem="*res://Scripts/Items/item_system.gd"
 Quips="*res://Scripts/Ui/quips.gd"
 Music="*res://Scenes/Audio/music.tscn"
 Transition="*res://Scripts/Ui/transition.gd"
+Status="*res://Scripts/Player/Status/status_system.gd"
 Online="*res://Scripts/Online/online.gd"
 
 [display]

@@ -5,3 +5,4 @@
 [resource]
 script = ExtResource("1_aq73j")
 blurb = "same maze, same key, same exit. first one out wins"
+item_pool = Array[String](["arrow", "echo", "freeze", "glass_opener", "leap", "rush", "saw_paths", "shield", "speed"])

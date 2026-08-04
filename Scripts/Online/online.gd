@@ -137,6 +137,14 @@ const MSG_HIT := 8
 ## meters. A little over one cell, so a pass down the same corridor lands it
 const HIT_RANGE := 2.4
 
+## A tile scrubbed bare by a roller, whoever it belonged to
+const MSG_ERASE := 9
+
+## Something done to another cube — a soaking, a jolt. Like the cat's kill it
+## has to be a message: the machine that owns a cube is the one that may change
+## what it can do
+const MSG_STATUS := 10
+
 ## How many cells at a team's end of the maze a player may come back at. Wide
 ## enough that a death does not put them back on the tile they just left, tight
 ## enough that they are still on their own side
@@ -1235,6 +1243,39 @@ func _handle_hit(message: Array) -> void:
 		death.kill(true)
 
 
+## Scrubs a tile bare whoever painted it, and tells the others. Unlike giving
+## back your own tiles this takes anybody's, so it carries no owner to check —
+## the roller that did it has already earned the right by getting there
+func erase_cell(cell: Vector2i) -> void:
+	if not is_painting() or not paint.claims.has(cell):
+		return
+
+	paint.claims.erase(cell)
+	_broadcast([MSG_ERASE, cell], true)
+	paint_changed.emit()
+
+
+func _handle_erase(message: Array) -> void:
+	if message.size() < 2 or not paint.claims.has(message[1] as Vector2i):
+		return
+
+	paint.claims.erase(message[1] as Vector2i)
+	paint_changed.emit()
+
+
+## Puts a status on somebody else's cube. Their machine decides what it means
+func send_status(account: int, effect: String, seconds: float) -> void:
+	if is_racing():
+		_broadcast([MSG_STATUS, account, effect, seconds], true)
+
+
+func _handle_status(message: Array) -> void:
+	if message.size() < 4 or int(message[1]) != steam.id:
+		return
+
+	Status.apply(String(message[2]), float(message[3]))
+
+
 ## Sends the tiles taken since the last tick, all in one message
 func _tick_paint(delta: float) -> void:
 	_paint_timer -= delta
@@ -1388,6 +1429,10 @@ func _handle(sender: int, message: Array) -> void:
 			_handle_unpaint(runner, message)
 		MSG_HIT:
 			_handle_hit(message)
+		MSG_ERASE:
+			_handle_erase(message)
+		MSG_STATUS:
+			_handle_status(message)
 
 
 ## Keeps the blade positions of every cube, so that whoever is watched can have

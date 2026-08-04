@@ -42,6 +42,17 @@ var _boosts: Dictionary = {}
 ## Gravity and collision keep running, only the input is ignored
 var input_enabled: bool = true
 
+## Upward speed the next step takes off with, spent the moment it is used.
+## Setting the velocity from outside does not work: a cube standing on the floor
+## has any upward speed flattened by the clamp below before it is ever moved
+var _launch: float = 0.0
+
+
+## Throws the cube upwards on the next step. Whatever asked for it decides how
+## hard, this only makes sure the floor does not eat it
+func launch(speed: float) -> void:
+	_launch = maxf(speed, 0.0)
+
 
 ## Puts that item's boost up. The same source setting it again replaces its own
 ## share, so an item that is picked up twice does not count twice
@@ -87,7 +98,10 @@ func _physics_process(delta: float) -> void:
 		body.velocity.x = move_toward(body.velocity.x, 0.0, friction * delta)
 		body.velocity.z = move_toward(body.velocity.z, 0.0, friction * delta)
 
-	if body.is_on_floor():
+	if _launch > 0.0:
+		body.velocity.y = _launch
+		_launch = 0.0
+	elif body.is_on_floor():
 		body.velocity.y = minf(body.velocity.y, 0.0)
 	else:
 		body.velocity.y -= gravity * delta
