@@ -194,7 +194,7 @@ static func roll_team_colors(race_seed: int, count: int) -> Array[Color]:
 
 
 static func default_settings() -> Dictionary:
-	return {"mode": 0, "size": 2, "shape": 0, "difficulty": 2, "teams": 0}
+	return {"mode": 0, "size": 2, "shape": 0, "difficulty": 2, "teams": 0, "minutes": 1}
 
 
 ## The same settings with every random one rolled into a real value
@@ -229,6 +229,8 @@ static func options_for(key: String) -> Array:
 			return book().shapes
 		"teams":
 			return book().team_counts
+		"minutes":
+			return book().round_minutes
 
 	return book().difficulties
 
@@ -266,6 +268,21 @@ static func team_count(settings: Dictionary) -> int:
 	return book().team_counts[index_of(settings, "teams")]
 
 
+## How long that round runs. The lobby only sets it for a mode that has a clock,
+## everything else keeps whatever the mode itself was written with
+static func round_seconds(settings: Dictionary) -> float:
+	var mode := mode_of(settings)
+	if mode.round_seconds <= 0.0:
+		return 0.0
+
+	return float(book().round_minutes[index_of(settings, "minutes")]) * 60.0
+
+
+## True while the lobby is set to a mode that runs against a clock
+static func is_timed(settings: Dictionary) -> bool:
+	return mode_of(settings).round_seconds > 0.0
+
+
 ## True while the lobby is set to a mode that colours the floor
 static func is_paint(settings: Dictionary) -> bool:
 	return mode_of(settings).paints_floor
@@ -280,7 +297,7 @@ static func labels_for(key: String) -> Array:
 	var labels: Array = []
 
 	for option: Variant in options_for(key):
-		labels.append(_label_of(option))
+		labels.append(_label_of(option, key))
 
 	if allows_random(key):
 		labels.append(RANDOM_LABEL)
@@ -303,12 +320,16 @@ static func label_of(settings: Dictionary, key: String) -> String:
 	if is_random(key, value):
 		return RANDOM_LABEL
 
-	return _label_of(options_for(key)[index_of(settings, key)])
+	return _label_of(options_for(key)[index_of(settings, key)], key)
 
 
-## Team counts are plain numbers, everything else carries its own name
-static func _label_of(option: Variant) -> String:
-	return "%d TEAMS" % int(option) if option is int else String(option.label)
+## Two settings are plain numbers and need the word that goes with them said
+## here. Everything else carries its own name
+static func _label_of(option: Variant, key: String) -> String:
+	if option is not int:
+		return String(option.label)
+
+	return "%d MIN" % int(option) if key == "minutes" else "%d TEAMS" % int(option)
 
 
 ## Every randomisable setting turned over to the dice at once
@@ -331,6 +352,9 @@ static func title_of(settings: Dictionary) -> String:
 
 	if is_paint(settings):
 		parts.append(label_of(settings, "teams"))
+
+	if is_timed(settings):
+		parts.append(label_of(settings, "minutes"))
 
 	return "  ·  ".join(parts)
 

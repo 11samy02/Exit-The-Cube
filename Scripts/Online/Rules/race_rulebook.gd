@@ -14,6 +14,10 @@ class_name RaceRulebook
 ## How many sides the room can be split into
 @export var team_counts: Array[int] = [2, 3, 4]
 
+## How long a round of a timed mode runs. Only offered where the mode has a
+## clock at all, so the race never shows it
+@export var round_minutes: Array[int] = [3, 5, 7]
+
 @export var difficulties: Array[Difficulty] = []
 
 @export_group("Teams")

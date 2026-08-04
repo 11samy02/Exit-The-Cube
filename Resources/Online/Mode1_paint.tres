@@ -1,12 +1,12 @@
-[gd_resource type="Resource" script_class="RaceMode" format=3]
+[gd_resource type="Resource" script_class="RaceMode" format=3 uid="uid://bious32f7gnf2"]
 
-[ext_resource type="Script" path="res://Scripts/Online/Rules/race_mode.gd" id="1_b1ryw"]
+[ext_resource type="Script" uid="uid://bbuw25rvtk03n" path="res://Scripts/Online/Rules/race_mode.gd" id="1_b1ryw"]
 
 [resource]
 script = ExtResource("1_b1ryw")
 id = "paint"
 label = "PAINT"
-blurb = "teams, five minutes, and a floor that remembers who walked on it"
+blurb = "teams, a clock, and a floor that remembers who walked on it"
 with_exit = false
 paints_floor = true
 restock_items = true

@@ -470,7 +470,7 @@ func saw_revive_seconds() -> float:
 
 ## Seconds left in the painting round, 0 once it is over
 func round_left() -> float:
-	return maxf(mode().round_seconds - GameState.run_time, 0.0)
+	return maxf(RaceRules.round_seconds(settings) - GameState.run_time, 0.0)
 
 
 func round_ended() -> bool:

@@ -1,6 +1,6 @@
-[gd_resource type="Resource" script_class="RaceMode" format=3]
+[gd_resource type="Resource" script_class="RaceMode" format=3 uid="uid://bs71u1aqg5xtt"]
 
-[ext_resource type="Script" path="res://Scripts/Online/Rules/race_mode.gd" id="1_aq73j"]
+[ext_resource type="Script" uid="uid://bbuw25rvtk03n" path="res://Scripts/Online/Rules/race_mode.gd" id="1_aq73j"]
 
 [resource]
 script = ExtResource("1_aq73j")

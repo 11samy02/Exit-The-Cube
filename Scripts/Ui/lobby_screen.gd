@@ -213,6 +213,7 @@ func _build_rules() -> Control:
 	_add_rule(column, "shape", "MAP SHAPE")
 	_add_rule(column, "difficulty", "DIFFICULTY")
 	_add_rule(column, "teams", "TEAMS")
+	_add_rule(column, "minutes", "ROUND TIME")
 
 	column.add_child(OnlineUi.gap(4))
 	_random_button = OnlineUi.button("SURPRISE US")
@@ -268,18 +269,30 @@ func _build_actions() -> void:
 ## dropdowns take no focus at all and up simply stays where it is
 func _wire_focus() -> void:
 	OnlineUi.link_row([_invite_button, _action_button, _leave_button])
-
-	var pickers: Array = []
-	for key: String in ["mode", "size", "shape", "difficulty"]:
-		pickers.append(_pickers[key])
-
-	pickers.append(_random_button)
-	OnlineUi.link_column(pickers)
+	_wire_rule_focus()
 
 	for button: Control in [_invite_button, _action_button, _leave_button]:
 		button.focus_neighbor_top = button.get_path_to(_random_button)
 
 	_random_button.focus_neighbor_bottom = _random_button.get_path_to(_action_button)
+
+
+## Rebuilt whenever a setting comes or goes, because the chain has to skip the
+## dropdowns the chosen mode has hidden. Walking into one that is not on screen
+## looks like the stick has stopped working
+func _wire_rule_focus() -> void:
+	if _random_button == null:
+		return
+
+	var pickers: Array = []
+
+	for key: String in ["mode", "size", "shape", "difficulty", "teams", "minutes"]:
+		var picker: OptionButton = _pickers[key]
+		if picker.visible:
+			pickers.append(picker)
+
+	pickers.append(_random_button)
+	OnlineUi.link_column(pickers)
 
 
 ## Everything on the screen comes from one place, so a callback, a timer tick
@@ -306,7 +319,9 @@ func _show_rules() -> void:
 			picker.selected = at
 
 	_show_rule("teams", RaceRules.is_paint(Online.settings))
+	_show_rule("minutes", RaceRules.is_timed(Online.settings))
 	_random_button.disabled = not Online.is_host
+	_wire_rule_focus()
 
 
 ## Hides a setting the chosen mode has no use for, label and all. A dropdown

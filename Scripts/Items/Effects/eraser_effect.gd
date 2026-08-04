@@ -1,17 +1,26 @@
 extends ItemEffect
 class_name EraserEffect
 
-## Sends a roller off towards the nearest enemy paint and washes a stretch of it
-## away. Anybody it runs into on the way is left soaked and slow.
+## Sends a roller out through the maze that washes enemy paint off the floor and
+## soaks whoever it passes.
+##
+## It always goes somewhere. Enemy paint first, then whichever enemy is nearest,
+## and failing both it simply patrols — an item that quietly did nothing because
+## the other side had not painted yet would read as broken.
 ##
 ## It scrubs rather than paints: the tiles it takes are left bare, not turned to
-## your colour. Whoever wants them has to walk them
+## your colour. Whoever wants them has to walk them. Your own side's paint it
+## rolls straight over
 
-## The roller. Its mesh is swapped for the model in the scene
+## The roller. Whatever mesh the scene carries is used, and a stand-in is built
+## if it carries none
 @export var roller_scene: PackedScene
 
 ## How many enemy tiles it washes off before it is spent
-@export var tiles: int = 20
+@export var tiles: int = 15
+
+## How long it stays out when it cannot reach that many, in seconds
+@export var life: float = 20.0
 
 ## Cells a second it travels
 @export var speed: float = 9.0
@@ -26,8 +35,12 @@ class_name EraserEffect
 @export var soak_effect: String = "slow"
 @export var soak_seconds: float = 8.0
 
-## Given up on after this long, so a roller that cannot find a way stops
-@export var life: float = 12.0
+## How far off a patrol point is picked when there is nothing to hunt. It keeps
+## the roller out in the maze instead of shuffling around the cube's own cell
+@export var patrol_distance: int = 12
+
+## Size of the stand-in roller, in meters. Only used until the scene has a mesh
+@export var stand_in_size: Vector2 = Vector2(0.26, 0.85)
 
 var _roller: Node3D = null
 var _route: Array[Vector2i] = []
@@ -35,6 +48,7 @@ var _at: int = 0
 var _washed: int = 0
 var _soaked: Dictionary = {}
 var _generator: MapGenerator = null
+var _tint: Color = Color.WHITE
 
 
 func _start() -> void:
@@ -43,37 +57,95 @@ func _start() -> void:
 		return
 
 	_generator = get_tree().get_first_node_in_group("map_generator") as MapGenerator
-	if _generator == null or player == null:
+	if _generator == null or _generator.grid_map == null or player == null:
 		stop(false)
 		return
 
-	_route = _route_to_enemy_paint()
-	if _route.is_empty():
-		stop(false)
-		return
-
+	_tint = Online.team_color(Online.team_of(Online.steam.id))
 	_build_roller()
-	time_left = minf(time_left, life)
+
+	if _roller == null:
+		stop(false)
+		return
+
+	_retarget()
+	time_left = maxf(time_left, life)
+	show_vignette(0.5)
 
 
-## The way from here to the nearest cell somebody else has painted, walked
-## through the corridors rather than measured across the walls
-func _route_to_enemy_paint() -> Array[Vector2i]:
-	var grid := _generator.grid_map
-	var at := grid.local_to_map(grid.to_local(player.global_position))
-	var here := Vector2i(at.x, at.z)
+func _tick(delta: float) -> void:
+	if _roller == null or not is_instance_valid(_roller):
+		stop(false)
+		return
+
+	_roll(delta)
+	_soak_anybody_near()
+
+	if _washed >= tiles:
+		stop(false)
+
+
+## Walks the route and scrubs the enemy tiles it rolls over. Its own side's
+## paint it leaves alone — the roller is a weapon, not a mess
+func _roll(delta: float) -> void:
+	if _at >= _route.size():
+		_retarget()
+		if _at >= _route.size():
+			return
+
+	var target := _cell_world(_route[_at])
+	var step := speed * _generator.grid_map.cell_size.x * delta
+	_roller.global_position = _roller.global_position.move_toward(target, step)
+	_face(target)
+
+	if _roller.global_position.distance_to(target) > reach:
+		return
+
+	_wash(_route[_at])
+	_at += 1
+
+
+func _wash(cell: Vector2i) -> void:
+	if not _is_enemy_tile(cell, Online.team_of(Online.steam.id)):
+		return
+
+	Online.erase_cell(cell)
+	_washed += 1
+
+
+## Picks the next thing to drive at, in the order that makes the item feel like
+## it is hunting: paint to wash, then somebody to soak, then anywhere at all
+func _retarget() -> void:
 	var mine := Online.team_of(Online.steam.id)
+	var from := _current_cell()
 
-	var came_from := {here: here}
-	var queue: Array[Vector2i] = [here]
+	var route := _route_to(from, _is_enemy_tile.bind(mine))
+	if route.is_empty():
+		route = _route_to(from, _holds_enemy.bind(mine))
+	if route.is_empty():
+		route = _route_to(from, _far_enough.bind(from))
+
+	if route.size() < 2:
+		stop(false)
+		return
+
+	_route = route
+	_at = 1
+
+
+## Breadth first from a cell until something answers the question, which keeps
+## the roller in the corridors rather than sending it straight through a wall
+func _route_to(from: Vector2i, wanted: Callable) -> Array[Vector2i]:
+	var came_from := {from: from}
+	var queue: Array[Vector2i] = [from]
 	var head := 0
 
 	while head < queue.size():
 		var cell: Vector2i = queue[head]
 		head += 1
 
-		if _is_enemy_tile(cell, mine):
-			return _trace(came_from, here, cell)
+		if cell != from and wanted.call(cell):
+			return _trace(came_from, from, cell)
 
 		for step in _generator.get_path_neighbors(cell):
 			if not came_from.has(step):
@@ -88,6 +160,28 @@ func _is_enemy_tile(cell: Vector2i, mine: int) -> bool:
 	return claim != null and claim.team != mine
 
 
+## True where somebody from another side is standing
+func _holds_enemy(cell: Vector2i, mine: int) -> bool:
+	for id: int in Online.runners:
+		if id == Online.steam.id or Online.team_of(id) == mine:
+			continue
+
+		var runner: Dictionary = Online.runners[id]
+		if not bool(runner["placed"]) or bool(runner["dead"]):
+			continue
+
+		if _cell_of(runner["position"] as Vector3) == cell:
+			return true
+
+	return false
+
+
+## The patrol fallback. Any cell a good way off will do, the point is only that
+## the roller is seen working the maze instead of standing still
+func _far_enough(cell: Vector2i, from: Vector2i) -> bool:
+	return absi(cell.x - from.x) + absi(cell.y - from.y) >= patrol_distance
+
+
 func _trace(came_from: Dictionary, from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 	var route: Array[Vector2i] = [to]
 
@@ -99,27 +193,44 @@ func _trace(came_from: Dictionary, from: Vector2i, to: Vector2i) -> Array[Vector
 
 
 func _build_roller() -> void:
-	if roller_scene == null:
-		return
-
-	_roller = roller_scene.instantiate()
+	_roller = roller_scene.instantiate() if roller_scene != null else Node3D.new()
 	get_tree().current_scene.add_child(_roller)
-	_roller.global_position = _cell_world(_route[0])
+	_roller.global_position = _cell_world(_current_cell_of_player())
+
+	if _meshes_of(_roller).is_empty():
+		_roller.add_child(_stand_in())
+
 	_paint_roller()
 
 
-## The roller wears the colour of whoever sent it, so a stretch of floor going
-## bare has something visibly doing it
-func _paint_roller() -> void:
-	var tint := Online.team_color(Online.team_of(Online.steam.id))
+## A roller drawn from primitives, so the item is visible before the model is in
+func _stand_in() -> Node3D:
+	var barrel := MeshInstance3D.new()
+	var cylinder := CylinderMesh.new()
+	cylinder.top_radius = stand_in_size.x
+	cylinder.bottom_radius = stand_in_size.x
+	cylinder.height = stand_in_size.y
+	barrel.mesh = cylinder
+	barrel.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+	return barrel
 
+
+## The roller wears the colour of whoever sent it, mesh and light both, so a
+## stretch of floor going bare has something visibly doing it
+func _paint_roller() -> void:
 	for mesh in _meshes_of(_roller):
 		var material := StandardMaterial3D.new()
-		material.albedo_color = tint
+		material.albedo_color = _tint
 		material.emission_enabled = true
-		material.emission = tint
-		material.emission_energy_multiplier = 0.8
+		material.emission = _tint
+		material.emission_energy_multiplier = 1.4
 		mesh.material_override = material
+
+	var glow := OmniLight3D.new()
+	glow.light_color = _tint
+	glow.light_energy = 1.6
+	glow.omni_range = 4.0
+	_roller.add_child(glow)
 
 
 func _meshes_of(node: Node) -> Array[MeshInstance3D]:
@@ -134,72 +245,13 @@ func _meshes_of(node: Node) -> Array[MeshInstance3D]:
 	return found
 
 
-func _tick(delta: float) -> void:
-	if _roller == null or not is_instance_valid(_roller):
-		stop(false)
-		return
+## Turns the barrel across the way it is going, which is the way a roller rolls
+func _face(target: Vector3) -> void:
+	var along := target - _roller.global_position
+	along.y = 0.0
 
-	_roll(delta)
-	_soak_anybody_near()
-
-	if _washed >= tiles or _at >= _route.size():
-		stop(false)
-
-
-## Walks the route, scrubbing whatever it rolls over that is not ours
-func _roll(delta: float) -> void:
-	if _at >= _route.size():
-		return
-
-	var target := _cell_world(_route[_at])
-	var step := speed * _generator.grid_map.cell_size.x * delta
-	_roller.global_position = _roller.global_position.move_toward(target, step)
-
-	if _roller.global_position.distance_to(target) > reach:
-		return
-
-	Online.erase_cell(_route[_at])
-	_washed += 1
-	_at += 1
-
-	if _at >= _route.size() and _washed < tiles:
-		_extend_route()
-
-
-## Once it has reached the paint it came for, it keeps going to whatever enemy
-## tile is next, so one roller washes a stretch rather than a single cell
-func _extend_route() -> void:
-	var mine := Online.team_of(Online.steam.id)
-	var from := _route[_route.size() - 1]
-
-	for step in _generator.get_path_neighbors(from):
-		if _is_enemy_tile(step, mine):
-			_route.append(step)
-			return
-
-	var onward := _route_from(from, mine)
-	if not onward.is_empty():
-		_route.append_array(onward.slice(1))
-
-
-func _route_from(from: Vector2i, mine: int) -> Array[Vector2i]:
-	var came_from := {from: from}
-	var queue: Array[Vector2i] = [from]
-	var head := 0
-
-	while head < queue.size():
-		var cell: Vector2i = queue[head]
-		head += 1
-
-		if cell != from and _is_enemy_tile(cell, mine):
-			return _trace(came_from, from, cell)
-
-		for step in _generator.get_path_neighbors(cell):
-			if not came_from.has(step):
-				came_from[step] = cell
-				queue.append(step)
-
-	return []
+	if along.length_squared() > 0.001:
+		_roller.rotation.y = atan2(along.x, along.z)
 
 
 ## Anybody on another side who is close enough gets soaked, once each
@@ -219,10 +271,24 @@ func _soak_anybody_near() -> void:
 			Online.send_status(id, soak_effect, soak_seconds)
 
 
+func _current_cell() -> Vector2i:
+	return _cell_of(_roller.global_position)
+
+
+func _current_cell_of_player() -> Vector2i:
+	return _cell_of(player.global_position)
+
+
+func _cell_of(where: Vector3) -> Vector2i:
+	var grid := _generator.grid_map
+	var at := grid.local_to_map(grid.to_local(where))
+	return Vector2i(at.x, at.z)
+
+
 func _cell_world(cell: Vector2i) -> Vector3:
 	var grid := _generator.grid_map
 	var local := grid.map_to_local(Vector3i(cell.x, 0, cell.y))
-	local.y += grid.cell_size.y * 0.5 + 0.3
+	local.y += grid.cell_size.y * 0.5 + stand_in_size.x
 	return grid.to_global(local)
 
 
