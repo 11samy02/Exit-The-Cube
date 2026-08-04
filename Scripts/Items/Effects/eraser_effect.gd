@@ -42,6 +42,15 @@ class_name EraserEffect
 ## Size of the stand-in roller, in meters. Only used until the scene has a mesh
 @export var stand_in_size: Vector2 = Vector2(0.26, 0.85)
 
+## Which surface of the model takes the team colour. The rest of it keeps what
+## it was modelled with, so a frame stays a frame instead of going one flat
+## colour. A model with no surface by this name is tinted whole
+@export var tinted_surface: String = "color"
+
+## The widest the roller may be, in meters. A model bigger than this is scaled
+## down to it so it cannot poke through the corridor walls
+@export var fit_width: float = 1.3
+
 var _roller: Node3D = null
 var _route: Array[Vector2i] = []
 var _at: int = 0
@@ -49,6 +58,10 @@ var _washed: int = 0
 var _soaked: Dictionary = {}
 var _generator: MapGenerator = null
 var _tint: Color = Color.WHITE
+
+## How high off the floor the roller's origin has to sit, worked out from the
+## model rather than guessed
+var _lift: float = 0.0
 
 
 func _start() -> void:
@@ -195,12 +208,45 @@ func _trace(came_from: Dictionary, from: Vector2i, to: Vector2i) -> Array[Vector
 func _build_roller() -> void:
 	_roller = roller_scene.instantiate() if roller_scene != null else Node3D.new()
 	get_tree().current_scene.add_child(_roller)
-	_roller.global_position = _cell_world(_current_cell_of_player())
 
 	if _meshes_of(_roller).is_empty():
 		_roller.add_child(_stand_in())
 
+	_settle_size()
 	_paint_roller()
+	_roller.global_position = _cell_world(_cell_of(player.global_position))
+
+
+## Sizes the model to the corridor and works out how high off the floor it has
+## to sit for its underside to touch. Doing it from the mesh means the model can
+## be remade at any scale, around any origin, without a number here changing
+func _settle_size() -> void:
+	var bounds := _bounds_of(_roller)
+	if bounds.size == Vector3.ZERO:
+		_lift = stand_in_size.x
+		return
+
+	var widest := maxf(bounds.size.x, bounds.size.z)
+	if widest > fit_width:
+		_roller.scale = Vector3.ONE * (fit_width / widest)
+
+	_lift = -bounds.position.y * _roller.scale.y + 0.02
+
+
+## Everything the roller's meshes cover, in the roller's own space
+func _bounds_of(node: Node3D) -> AABB:
+	var bounds := AABB()
+	var first := true
+
+	for mesh in _meshes_of(node):
+		if mesh.mesh == null:
+			continue
+
+		var box := node.global_transform.affine_inverse() * (mesh.global_transform * mesh.mesh.get_aabb())
+		bounds = box if first else bounds.merge(box)
+		first = false
+
+	return bounds
 
 
 ## A roller drawn from primitives, so the item is visible before the model is in
@@ -212,25 +258,55 @@ func _stand_in() -> Node3D:
 	cylinder.height = stand_in_size.y
 	barrel.mesh = cylinder
 	barrel.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+	barrel.position.y = stand_in_size.x
 	return barrel
 
 
 ## The roller wears the colour of whoever sent it, mesh and light both, so a
 ## stretch of floor going bare has something visibly doing it
 func _paint_roller() -> void:
-	for mesh in _meshes_of(_roller):
-		var material := StandardMaterial3D.new()
-		material.albedo_color = _tint
-		material.emission_enabled = true
-		material.emission = _tint
-		material.emission_energy_multiplier = 1.4
-		mesh.material_override = material
+	var meshes := _meshes_of(_roller)
+	var painted := false
+
+	for mesh in meshes:
+		painted = _tint_surfaces(mesh) or painted
+
+	if not painted:
+		for mesh in meshes:
+			mesh.material_override = _team_material()
 
 	var glow := OmniLight3D.new()
 	glow.light_color = _tint
 	glow.light_energy = 1.6
 	glow.omni_range = 4.0
 	_roller.add_child(glow)
+
+
+## Paints only the surfaces the model named for it, and says whether it found
+## any. The stand-in has none, so it falls through to being tinted whole
+func _tint_surfaces(mesh: MeshInstance3D) -> bool:
+	if mesh.mesh == null:
+		return false
+
+	var found := false
+
+	for surface in range(mesh.mesh.get_surface_count()):
+		if mesh.mesh.surface_get_name(surface).to_lower() != tinted_surface.to_lower():
+			continue
+
+		mesh.set_surface_override_material(surface, _team_material())
+		found = true
+
+	return found
+
+
+func _team_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = _tint
+	material.emission_enabled = true
+	material.emission = _tint
+	material.emission_energy_multiplier = 1.4
+	return material
 
 
 func _meshes_of(node: Node) -> Array[MeshInstance3D]:
@@ -288,7 +364,7 @@ func _cell_of(where: Vector3) -> Vector2i:
 func _cell_world(cell: Vector2i) -> Vector3:
 	var grid := _generator.grid_map
 	var local := grid.map_to_local(Vector3i(cell.x, 0, cell.y))
-	local.y += grid.cell_size.y * 0.5 + stand_in_size.x
+	local.y += grid.cell_size.y * 0.5 + _lift
 	return grid.to_global(local)
 
 
