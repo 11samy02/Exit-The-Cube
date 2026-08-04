@@ -50,6 +50,9 @@ const RACE_OVERLAY := "res://Scripts/Ui/race_overlay.gd"
 ## How many cubes fit in one maze
 const MAX_PLAYERS := 12
 
+## How few it can be run with. A race needs somebody to be ahead of
+const MIN_PLAYERS := 2
+
 ## What the lobby browser filters on, so the list is this game and not every
 ## lobby the app id ever opened
 const TAG_KEY := "game"
@@ -367,7 +370,11 @@ func is_ready() -> bool:
 
 ## True once every cube in the lobby has readied up, the host included. Nobody
 ## presses start any more — the room being green is what starts the race, so the
-## host is a player in it rather than the one holding everybody up
+## host is a player in it rather than the one holding everybody up.
+##
+## The host used to be counted as ready no matter what, left over from when the
+## start button was theirs. It meant they could never take their own readiness
+## back, and that a host sitting alone in a fresh lobby was already a full room
 func everyone_ready() -> bool:
 	if members.is_empty():
 		return false
@@ -377,6 +384,13 @@ func everyone_ready() -> bool:
 			return false
 
 	return true
+
+
+## Whether the countdown may run. A race wants somebody to race against, so one
+## cube readying up on its own waits for company rather than opening a maze
+## nobody else is in
+func race_can_start() -> bool:
+	return members.size() >= MIN_PLAYERS and everyone_ready()
 
 
 ## Moves one of the four settings. Only the host may, everybody else reads them
@@ -741,7 +755,7 @@ func _refresh_members() -> void:
 		members.append({
 			"id": id,
 			"name": steam.persona(id),
-			"ready": steam.member_data(lobby_id, id, "ready") == "1" or id == owner,
+			"ready": steam.member_data(lobby_id, id, "ready") == "1",
 			"host": id == owner,
 		})
 

@@ -395,10 +395,12 @@ func _on_action_pressed() -> void:
 ## everybody has the same list in front of them, but the lobby data is the host's
 ## to write and the race begins when that number lands
 func _tick_start(delta: float) -> void:
-	if not Online.in_lobby() or not Online.everyone_ready():
+	if not Online.in_lobby() or not Online.race_can_start():
 		if _starting_in >= 0.0:
 			_starting_in = -1.0
-			_countdown.text = ""
+
+		_countdown.text = _waiting_line()
+		_countdown.label_settings.font_color = OnlineUi.MUTED
 		return
 
 	if _starting_in < 0.0:
@@ -406,10 +408,24 @@ func _tick_start(delta: float) -> void:
 
 	_starting_in -= delta
 	_countdown.text = "ALL READY  ·  STARTING IN %d" % maxi(ceili(_starting_in), 0)
+	_countdown.label_settings.font_color = OnlineUi.READY
 
 	if _starting_in <= 0.0 and Online.is_host:
 		_starting_in = START_COUNTDOWN
 		Online.start_race()
+
+
+## What the line under the rules says while the race is not going anywhere. A
+## room that simply shows nothing leaves the last player to ready up wondering
+## whether the button worked
+func _waiting_line() -> String:
+	if Online.members.size() < Online.MIN_PLAYERS:
+		return "waiting for somebody to join" if Online.is_ready() else ""
+
+	if Online.is_ready():
+		return "waiting on the rest of the room"
+
+	return ""
 
 
 ## Steam's own invite window is the nicer one where it exists, so it is asked
