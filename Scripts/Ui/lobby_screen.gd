@@ -17,6 +17,10 @@ const REFRESH_INTERVAL := 1.0
 ## How often the line under the title rolls over
 const QUIP_INTERVAL := 9.0
 
+## Seconds between the room going green and the maze opening. Long enough to
+## notice and to take it back, short enough that nobody waits on it
+const START_COUNTDOWN := 3.0
+
 @onready var _layout: VBoxContainer = %Layout
 
 var _subtitle: Label = null
@@ -24,8 +28,12 @@ var _quip: Label = null
 var _slots: VBoxContainer = null
 var _ready_count: Label = null
 var _pickers: Dictionary = {}
-var _blurbs: Dictionary = {}
 var _random_button: Button = null
+var _countdown: Label = null
+
+## Seconds left before the race starts itself, negative while the room is not
+## green. Reset the moment anybody unreadies
+var _starting_in: float = -1.0
 var _friends_root: Control = null
 var _friends_list: VBoxContainer = null
 var _friends_note: Label = null
@@ -108,6 +116,8 @@ func _process(delta: float) -> void:
 	if _leaving:
 		return
 
+	_tick_start(delta)
+
 	_refresh_timer -= delta
 	if _refresh_timer <= 0.0:
 		_refresh_timer = REFRESH_INTERVAL
@@ -140,7 +150,13 @@ func _build() -> void:
 	columns.add_child(_build_players())
 	columns.add_child(_build_rules())
 
-	_layout.add_child(OnlineUi.gap(24))
+	_layout.add_child(OnlineUi.gap(14))
+
+	_countdown = OnlineUi.body("", 24, OnlineUi.READY)
+	_countdown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_layout.add_child(_countdown)
+
+	_layout.add_child(OnlineUi.gap(10))
 	_build_actions()
 	_swap_quip()
 
@@ -179,9 +195,7 @@ func _build_players() -> Control:
 	return frame
 
 
-## The four settings, each with the line that says what it gets you. The blurb
-## is what makes the difficulty list readable: five names in a dropdown say
-## nothing about what changes between them
+## The four settings the race is run under, the host's to pick
 func _build_rules() -> Control:
 	var frame := OnlineUi.panel(OnlineUi.EDGE)
 	frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -213,13 +227,8 @@ func _add_rule(column: VBoxContainer, key: String, title: String) -> void:
 		Online.is_host)
 	picker.item_selected.connect(_on_rule_picked.bind(key))
 	column.add_child(picker)
+	column.add_child(OnlineUi.gap(6))
 	_pickers[key] = picker
-
-	var blurb := OnlineUi.body("", 19, OnlineUi.TEXT)
-	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	blurb.custom_minimum_size = Vector2(0, 46)
-	column.add_child(blurb)
-	_blurbs[key] = blurb
 
 
 func _build_actions() -> void:
@@ -276,22 +285,16 @@ func _show_lobby() -> void:
 	_show_action()
 
 
-## A setting left on random shows its line in the accent colour, so a glance at
-## the column says which of the rules are still up to the dice
 func _show_rules() -> void:
 	for key: String in _pickers:
 		var picker: OptionButton = _pickers[key]
 		var at := int(Online.settings.get(key, 0))
-		var rolled := RaceRules.is_random(key, at)
 
 		picker.disabled = not Online.is_host
 		picker.focus_mode = Control.FOCUS_ALL if Online.is_host else Control.FOCUS_NONE
 
 		if picker.selected != at:
 			picker.selected = at
-
-		_blurbs[key].text = RaceRules.blurb_for(key, at)
-		_blurbs[key].label_settings.font_color = OnlineUi.ACCENT if rolled else OnlineUi.TEXT
 
 	_random_button.disabled = not Online.is_host
 
@@ -367,16 +370,10 @@ func _build_dot(color: Color) -> Control:
 	return dot
 
 
-## The host gets a start button that only lights up once the room is green, and
-## everybody else gets the toggle that turns their own light on
+## Everybody gets the same button, the host included. Nobody presses start any
+## more — the room going green is what starts the race
 func _show_action() -> void:
 	_invite_button.visible = Online.in_lobby()
-
-	if Online.is_host:
-		_action_button.text = "START RACE"
-		_action_button.disabled = not Online.everyone_ready()
-		return
-
 	_action_button.disabled = false
 	_action_button.text = "NOT READY" if Online.is_ready() else "READY"
 
@@ -385,12 +382,34 @@ func _on_action_pressed() -> void:
 	if _leaving:
 		return
 
-	if Online.is_host:
-		Online.start_race()
-		return
-
 	Online.set_ready(not Online.is_ready())
 	_show_lobby()
+
+
+## Counts the room down once everybody is green and calls it off the moment
+## anybody changes their mind. Starting on the instant the last light comes on
+## reads as the game deciding for itself, and leaves nobody a second to take it
+## back — so the countdown is the warning, not a formality.
+##
+## Only the host actually starts it. Everyone sees the same number because
+## everybody has the same list in front of them, but the lobby data is the host's
+## to write and the race begins when that number lands
+func _tick_start(delta: float) -> void:
+	if not Online.in_lobby() or not Online.everyone_ready():
+		if _starting_in >= 0.0:
+			_starting_in = -1.0
+			_countdown.text = ""
+		return
+
+	if _starting_in < 0.0:
+		_starting_in = START_COUNTDOWN
+
+	_starting_in -= delta
+	_countdown.text = "ALL READY  ·  STARTING IN %d" % maxi(ceili(_starting_in), 0)
+
+	if _starting_in <= 0.0 and Online.is_host:
+		_starting_in = START_COUNTDOWN
+		Online.start_race()
 
 
 ## Steam's own invite window is the nicer one where it exists, so it is asked

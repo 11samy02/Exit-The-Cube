@@ -388,8 +388,8 @@ func _draw_panel(standings: Array) -> void:
 		_panel_rows.add_child(_build_panel_row(runner))
 
 	_spectate_button.visible = Online.anyone_running()
-	_lobby_button.visible = Online.is_host
-	_lobby_note.text = "" if Online.is_host else "waiting for the host to open the lobby again"
+	_lobby_button.visible = true
+	_lobby_note.text = "the others keep racing without you" if Online.anyone_running() else ""
 
 
 func _build_panel_row(runner: Dictionary) -> Control:
@@ -539,8 +539,10 @@ func _show_watched() -> void:
 	_watch_item.text = "carrying  %s" % held.to_upper() if not held.is_empty() else "empty handed"
 
 
+## Steps this player back to the lobby and nobody else. The others are still in
+## their mazes, and being finished is not a reason to end their race
 func _on_lobby_pressed() -> void:
-	Online.return_to_lobby()
+	Online.leave_race()
 
 
 func _field() -> GhostField:

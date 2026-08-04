@@ -55,10 +55,15 @@ const MAX_PLAYERS := 12
 const TAG_KEY := "game"
 const TAG_VALUE := "exit_the_cube"
 
-## The lobby is being set up, or a race is on. Everything else reads this off
-## the lobby data rather than being told, so a player who joined late is right
-const STATE_LOBBY := "lobby"
-const STATE_RACING := "racing"
+## Which race the lobby is on, counted up by the host and read by everybody.
+##
+## It used to be a single word saying whether a race was on, and that is exactly
+## why stepping back to the lobby dragged the whole room out of the maze with it:
+## there was one flag for everyone, so one player changing it changed it for all.
+## A number that only ever goes up says "a new race has started" without saying
+## anything about who is still in the old one, and leaving becomes a thing a
+## player does to themselves
+const ROUND_KEY := "round"
 
 ## Where this machine stands. RACING is the only one the map scene cares about
 enum Phase { OFFLINE, LOBBY, RACING }
@@ -167,7 +172,7 @@ var _sent_progress: Dictionary = {}
 
 ## The lobby state this machine last acted on. Steam repeats a data update for
 ## every key that changed, and the race must only be entered once
-var _acted_state: String = ""
+var _acted_round: int = 0
 
 ## Packets out and in since this lobby was joined. The race panel puts them on
 ## screen, and they are the difference between "nothing is syncing" and knowing
@@ -360,11 +365,15 @@ func is_ready() -> bool:
 	return false
 
 
-## True once every cube in the lobby has readied up. The host is not asked, the
-## start button is the answer
+## True once every cube in the lobby has readied up, the host included. Nobody
+## presses start any more — the room being green is what starts the race, so the
+## host is a player in it rather than the one holding everybody up
 func everyone_ready() -> bool:
+	if members.is_empty():
+		return false
+
 	for member in members:
-		if not member["host"] and not member["ready"]:
+		if not bool(member["ready"]):
 			return false
 
 	return true
@@ -392,21 +401,31 @@ func start_race() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 
-	steam.set_joinable(lobby_id, false)
 	steam.set_lobby_data(lobby_id, "seed", str(rng.randi_range(0, 0x7FFFFFF)))
-	steam.set_lobby_data(lobby_id, "state", STATE_RACING)
+	steam.set_lobby_data(lobby_id, ROUND_KEY, str(_round() + 1))
 	_read_lobby_data()
-	_follow_state()
+	_follow_round()
 
 
-## Ends the race for the whole lobby and puts everybody back on the lobby screen
-func return_to_lobby() -> void:
-	if not is_host or lobby_id == 0:
+## Steps this machine out of the race and back to the lobby screen, and only this
+## machine. The others keep running: somebody who is done watching should not be
+## able to end everybody else's maze by walking away from their own
+func leave_race() -> void:
+	if phase != Phase.RACING:
 		return
 
-	steam.set_joinable(lobby_id, true)
-	steam.set_lobby_data(lobby_id, "state", STATE_LOBBY)
-	_follow_state()
+	phase = Phase.LOBBY
+	_level = null
+	runners.clear()
+	GameState.is_running = false
+	set_ready(false)
+	Transition.change_scene(LOBBY_SCENE)
+
+
+## Which race the lobby is on, 0 before the first one
+func _round() -> int:
+	var value := steam.lobby_data(lobby_id, ROUND_KEY)
+	return int(value) if not value.is_empty() else 0
 
 
 ## Called by the map once it has finished building itself. This is where the
@@ -565,18 +584,18 @@ func _on_lobby_created(result: int, lobby: int) -> void:
 	lobby_id = lobby
 	is_host = true
 	phase = Phase.LOBBY
-	_acted_state = STATE_LOBBY
+	_acted_round = 0
 
 	steam.set_lobby_data(lobby, TAG_KEY, TAG_VALUE)
 	steam.set_lobby_data(lobby, "host", steam.persona(steam.id))
-	steam.set_lobby_data(lobby, "state", STATE_LOBBY)
+	steam.set_lobby_data(lobby, ROUND_KEY, "0")
 	steam.set_lobby_data(lobby, "title", RaceRules.short_title_of(settings))
 	steam.set_joinable(lobby, true)
 
 	for key: String in settings:
 		steam.set_lobby_data(lobby, key, str(settings[key]))
 
-	set_ready(true)
+	set_ready(false)
 	_refresh_members()
 	lobby_entered.emit()
 	_open_lobby_screen()
@@ -590,10 +609,10 @@ func _on_lobby_joined(lobby: int, _permissions: int, _locked: bool, response: in
 	lobby_id = lobby
 	phase = Phase.LOBBY
 	is_host = steam.lobby_owner(lobby) == steam.id
-	_acted_state = STATE_LOBBY
 
 	set_ready(false)
 	_read_lobby_data()
+	_acted_round = _round()
 	_refresh_members()
 	_greet_everyone()
 	lobby_entered.emit()
@@ -628,31 +647,26 @@ func _on_lobby_data_update(_success: int, lobby: int, _member: int) -> void:
 	_read_lobby_data()
 	_refresh_members()
 	lobby_updated.emit()
-	_follow_state()
+	_follow_round()
 
 
-## The host wrote a new state into the lobby and everybody, the host included,
-## acts on it here rather than on the button that caused it
-func _follow_state() -> void:
-	var state := steam.lobby_data(lobby_id, "state")
-	if state.is_empty() or state == _acted_state:
+## The host counted the lobby on to a new race and every machine, the host
+## included, walks into it off the update it gets back rather than off the button
+## that caused it. Only going up ever means anything — there is no number that
+## means "stop", because stopping is something each player does for themselves
+func _follow_round() -> void:
+	var now := _round()
+	if now <= _acted_round:
 		return
 
-	_acted_state = state
-
-	if state == STATE_RACING:
-		_enter_race()
-	else:
-		_leave_race()
+	_acted_round = now
+	_enter_race()
 
 
 func _on_lobby_match_list(lobbies: Array) -> void:
 	var found: Array = []
 
 	for lobby: int in lobbies:
-		if steam.lobby_data(lobby, "state") != STATE_LOBBY:
-			continue
-
 		found.append({
 			"id": lobby,
 			"host": steam.lobby_data(lobby, "host"),
@@ -784,6 +798,7 @@ func _enter_race() -> void:
 	_send_timer = 0.0
 	_sent_progress.clear()
 	_build_runners()
+	set_ready(false)
 
 	Levels.stop()
 	GameState.is_running = false
@@ -792,18 +807,6 @@ func _enter_race() -> void:
 
 	race_launched.emit()
 	Transition.change_scene(MAP_SCENE)
-
-
-func _leave_race() -> void:
-	if phase != Phase.RACING:
-		return
-
-	phase = Phase.LOBBY
-	_level = null
-	runners.clear()
-	set_ready(is_host)
-	GameState.is_running = false
-	Transition.change_scene(LOBBY_SCENE)
 
 
 ## One runner per cube in the lobby, all of them on zero. A ghost is only drawn
@@ -1108,7 +1111,7 @@ func _reset() -> void:
 	is_host = false
 	race_seed = 0
 	_level = null
-	_acted_state = ""
+	_acted_round = 0
 	members.clear()
 	runners.clear()
 	_sent_progress.clear()
