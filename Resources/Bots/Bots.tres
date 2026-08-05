@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BotBook" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Bots/bot_skill.gd" id="1_skill"]
+[ext_resource type="Resource" path="res://Resources/Bots/Skill0_easy.tres" id="2_easy"]
+[ext_resource type="Resource" path="res://Resources/Bots/Skill1_normal.tres" id="3_normal"]
+[ext_resource type="Resource" path="res://Resources/Bots/Skill2_hard.tres" id="4_hard"]
+[ext_resource type="Resource" path="res://Resources/Bots/Skill3_master.tres" id="5_master"]
+[ext_resource type="Script" path="res://Scripts/Bots/bot_book.gd" id="6_book"]
+
+[resource]
+script = ExtResource("6_book")
+skills = Array[ExtResource("1_skill")]([ExtResource("2_easy"), ExtResource("3_normal"), ExtResource("4_hard"), ExtResource("5_master")])
+default_skill = 1
+max_players = 12
+names = PackedStringArray("CPU ALPHA", "CPU BRAVO", "CPU CHARLIE", "CPU DELTA", "CPU ECHO", "CPU FOXTROT", "CPU GOLF", "CPU HOTEL", "CPU INDIA", "CPU JULIET", "CPU KILO", "CPU LIMA")

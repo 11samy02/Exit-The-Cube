@@ -39,20 +39,20 @@ var _dirty: bool = true
 
 var _redraw_timer: float = 0.0
 
-## The cell the local cube was last standing over, so that standing still does
-## not re-claim the same tile fifteen times a second
-var _last_cell: Vector2i = Vector2i(-9999, -9999)
+## The cell each cube on this machine was last standing over, by seat, so that
+## standing still does not re-claim the same tile fifteen times a second
+var _last_cells: Dictionary = {}
 
 
 func _ready() -> void:
 	add_to_group(GROUP)
 	_grid = get_parent() as GridMap
 	_build_mesh()
-	Online.paint_changed.connect(_on_paint_changed)
+	Match.paint_changed.connect(_on_paint_changed)
 
 
 func _process(delta: float) -> void:
-	if not Online.is_painting():
+	if not Match.is_painting():
 		return
 
 	_claim_under_player()
@@ -94,32 +94,33 @@ func _build_mesh() -> void:
 	add_child(_mesh)
 
 
-## Claims whatever the local cube is standing over. Only the cell it moved onto,
-## so a player parked on one tile is not sending a claim on it every frame
+## Claims whatever every cube on this machine is standing over. Only the cell one
+## moved onto, so a player parked on a tile is not claiming it every frame — and
+## one dedupe per seat, or two cubes in the same corridor would keep cancelling
+## each other's memory of where they last were
 func _claim_under_player() -> void:
-	var player := get_tree().get_first_node_in_group("player") as Node3D
-	if player == null or _grid == null:
+	if _grid == null:
 		return
 
-	var death := get_tree().get_first_node_in_group("player_death") as PlayerDeath
-	if death != null and death.is_dead:
-		return
+	for player in Match.local_players():
+		if player.death.is_dead:
+			continue
 
-	var at := _grid.local_to_map(_grid.to_local(player.global_position))
-	var cell := Vector2i(at.x, at.z)
+		var at := _grid.local_to_map(_grid.to_local(player.global_position))
+		var cell := Vector2i(at.x, at.z)
 
-	if cell == _last_cell:
-		return
+		if _last_cells.get(player.seat, Vector2i(-9999, -9999)) == cell:
+			continue
 
-	_last_cell = cell
-	Online.paint_cell(cell)
+		_last_cells[player.seat] = cell
+		Match.paint_cell(player.account(), cell)
 
 
 ## Rebuilds the whole drawing off the state. A MultiMesh cannot have an instance
 ## taken out of it, and a round where paint is overwritten and lost to deaths is
 ## nothing but instances being taken out
 func _redraw() -> void:
-	var claims: Dictionary = Online.paint.claims
+	var claims: Dictionary = Match.paint().claims
 	var multi := _mesh.multimesh
 	multi.instance_count = claims.size()
 
@@ -128,7 +129,7 @@ func _redraw() -> void:
 	for cell: Vector2i in claims:
 		var claim: PaintState.Claim = claims[cell]
 		multi.set_instance_transform(at, Transform3D(Basis(), _world_of(cell)))
-		multi.set_instance_color(at, Online.team_color(claim.team))
+		multi.set_instance_color(at, Match.team_color(claim.team))
 		at += 1
 
 
@@ -148,7 +149,7 @@ func _on_paint_changed() -> void:
 	_dirty = true
 
 
-## Called when the cube is put back after a death, so that the tile it respawns
+## Called when a cube is put back after a death, so that the tile it respawns
 ## on is claimed rather than being skipped for having been the last one stood on
-func forget_last_cell() -> void:
-	_last_cell = Vector2i(-9999, -9999)
+func forget_last_cell(seat: int) -> void:
+	_last_cells.erase(seat)

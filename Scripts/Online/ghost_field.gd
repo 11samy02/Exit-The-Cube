@@ -54,11 +54,29 @@ const DEATH_BURST := 1.9
 const DEATH_TIME := 0.35
 const SPAWN_TIME := 0.3
 
-## Where the spectator camera sits behind whoever is being watched
-const WATCH_OFFSET := Vector3(0.0, 7.0, 8.5)
+## How far out the spectator camera starts, and how far it may be pushed
+const WATCH_DISTANCE := 9.0
+const WATCH_NEAR := 2.5
+const WATCH_FAR := 34.0
 
-## How quickly that camera follows, low enough to read as a camera operator
-const WATCH_SPEED := 4.0
+## Where it starts looking from, in degrees, and how far it may be tilted
+const WATCH_PITCH := -22.0
+const WATCH_PITCH_LIMITS := Vector2(-85.0, 40.0)
+
+## How far above the cube the camera aims
+const WATCH_HEIGHT := 0.8
+
+## Degrees a second at full stick, and degrees per pixel of mouse drag
+const WATCH_TURN := 150.0
+const WATCH_DRAG := 0.22
+
+## Units the wheel and the stick move the camera in and out by
+const WATCH_ZOOM_STEP := 1.6
+const WATCH_ZOOM_RATE := 12.0
+
+## How quickly the point it orbits catches up to the cube. The angle is the
+## watcher's own and is never smoothed, only the spot it swings around
+const WATCH_SPEED := 8.0
 
 ## One node per cube, by the account it belongs to
 var _ghosts: Dictionary = {}
@@ -76,6 +94,21 @@ var _held_saws: Dictionary = {}
 
 var _camera: Camera3D = null
 
+## Where the watcher has put the camera: the way it looks around whoever is
+## being followed, and how far out it sits. It is theirs and not the cube's —
+## being locked behind somebody else's shoulder is not watching, it is riding
+var _watch_yaw: float = 0.0
+var _watch_pitch: float = WATCH_PITCH
+var _watch_distance: float = WATCH_DISTANCE
+
+## The spot the camera swings around, eased so a hopping cube does not shake it
+var _watch_pivot := Vector3.ZERO
+
+## True while a mouse button is held, which is what turns a drag into a turn.
+## The buttons of the panel underneath have to keep working, so the mouse is
+## never captured for this
+var _dragging: bool = false
+
 
 func _ready() -> void:
 	add_to_group(GROUP)
@@ -85,14 +118,16 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not Online.is_racing():
+	if not Match.is_racing():
 		return
 
-	for id: int in Online.runners:
-		if id == Online.steam.id:
+	var runners := Match.runners()
+
+	for id: int in runners:
+		if Match.is_local(id):
 			continue
 
-		_update_ghost(id, Online.runners[id], delta)
+		_update_ghost(id, runners[id], delta)
 
 	_drop_gone_ghosts()
 	_move_camera(delta)
@@ -164,7 +199,7 @@ func _fade_of(ghost: Node3D) -> Callable:
 	var material := mesh.material_override as StandardMaterial3D
 	var tint: Color = label.modulate
 
-	var solid := Online.is_painting()
+	var solid := Match.is_painting()
 
 	return func(amount: float) -> void:
 		material.albedo_color = Color(tint.r, tint.g, tint.b, (1.0 if solid else GHOST_ALPHA) * amount)
@@ -216,7 +251,7 @@ func _show_name(ghost: Node3D, yaw: float) -> void:
 ## One transparent cube with a name over it. Built in code because it is only
 ## ever three nodes and every one of them is colored per player anyway
 func _build_ghost(runner: Dictionary) -> Node3D:
-	var color := Online.color_of(int(runner["id"]))
+	var color := Match.color_of(int(runner["id"]))
 
 	var ghost := Node3D.new()
 	add_child(ghost)
@@ -252,7 +287,7 @@ func _build_ghost(runner: Dictionary) -> Node3D:
 ## somewhere else"; in a team round they are on the same floor, fighting over the
 ## same tiles, and they should look like it
 func _ghost_material(color: Color) -> StandardMaterial3D:
-	var solid := Online.is_painting()
+	var solid := Match.is_painting()
 
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -277,7 +312,7 @@ static func ghost_color(account: int) -> Color:
 ## Ghosts of accounts that are no longer in the race at all
 func _drop_gone_ghosts() -> void:
 	for id: int in _ghosts.keys():
-		if not Online.runners.has(id):
+		if not Match.runners().has(id):
 			_ghosts[id].queue_free()
 			_ghosts.erase(id)
 
@@ -287,14 +322,26 @@ func _drop_gone_ghosts() -> void:
 func watchable() -> Array:
 	var found: Array = []
 
-	for runner in Online.standings():
-		if int(runner["id"]) == Online.steam.id:
+	for runner in Match.standings():
+		if Match.is_mine(int(runner["id"])):
 			continue
 
 		if not bool(runner["finished"]) and bool(runner["placed"]):
 			found.append(runner)
 
 	return found
+
+
+## The thing in the level that stands for that account: online it is the drawing
+## this node keeps, and in a race on one screen it is the cube itself. Nothing
+## else here has to know which of the two it is looking at
+func _body_of(account: int) -> Node3D:
+	var ghost: Node3D = _ghosts.get(account, null)
+	if ghost != null and ghost.visible:
+		return ghost
+
+	var seat := Match.seat_of_account(account)
+	return Player.at_seat(get_tree(), seat) if seat >= 0 else null
 
 
 func watching() -> int:
@@ -305,11 +352,14 @@ func watching() -> int:
 ## parented to the ghost, it follows it: a camera bolted to a hopping cube hops
 ## with it and is unwatchable within seconds
 func watch(account: int) -> void:
-	if not _ghosts.has(account):
+	var body := _body_of(account)
+	if body == null:
 		return
 
 	_watching = account
-	_camera.global_position = _ghosts[account].global_position + WATCH_OFFSET
+	_watch_pivot = body.global_position + Vector3.UP * WATCH_HEIGHT
+	_camera.global_position = _watch_pivot + _watch_arm()
+	_camera.look_at(_watch_pivot)
 	_camera.make_current()
 
 
@@ -331,15 +381,15 @@ func watch_step(direction: int) -> void:
 ## Hands the view back to the player's own camera
 func stop_watching() -> void:
 	_watching = 0
+	_dragging = false
 	_release_saws()
 
-	var player := get_tree().get_first_node_in_group("player") as Node3D
-	if player == null:
+	if Match.is_split():
 		return
 
-	var camera := player.get_node_or_null("Camera Pivot/Camera3D") as Camera3D
-	if camera != null:
-		camera.make_current()
+	var cube := Player.at_seat(get_tree(), 0)
+	if cube != null and is_instance_valid(cube.view):
+		cube.view.make_current()
 
 
 ## Puts the blades where the watched player sees them.
@@ -355,7 +405,7 @@ func stop_watching() -> void:
 ## and the packets fight over the same node every frame
 func _sync_watched_saws() -> void:
 	var spawner := get_tree().get_first_node_in_group(&"saw_spawner") as SawSpawner
-	var runner: Dictionary = Online.runners.get(_watching, {})
+	var runner: Dictionary = Match.runners().get(_watching, {})
 
 	if spawner == null or runner.is_empty():
 		return
@@ -404,15 +454,78 @@ func _move_camera(delta: float) -> void:
 	if _watching == 0:
 		return
 
-	_sync_watched_saws()
+	if Match.transport != null:
+		_sync_watched_saws()
 
-	var ghost: Node3D = _ghosts.get(_watching, null)
-	var runner: Dictionary = Online.runners.get(_watching, {})
+	var body := _body_of(_watching)
+	var runner: Dictionary = Match.runners().get(_watching, {})
 
-	if ghost == null or runner.is_empty() or bool(runner["finished"]) or not bool(runner["placed"]):
+	if body == null or runner.is_empty() or bool(runner["finished"]) or not bool(runner["placed"]):
 		watch_step(1)
 		return
 
-	var wanted := ghost.global_position + WATCH_OFFSET
-	_camera.global_position = _camera.global_position.lerp(wanted, minf(WATCH_SPEED * delta, 1.0))
-	_camera.look_at(ghost.global_position + Vector3.UP * 0.5)
+	_read_watch_input(delta)
+
+	var aim := body.global_position + Vector3.UP * WATCH_HEIGHT
+	_watch_pivot = _watch_pivot.lerp(aim, minf(WATCH_SPEED * delta, 1.0))
+	_camera.global_position = _watch_pivot + _watch_arm()
+	_camera.look_at(_watch_pivot)
+
+
+## Where the camera sits relative to the spot it is orbiting
+func _watch_arm() -> Vector3:
+	var yaw := deg_to_rad(_watch_yaw)
+	var pitch := deg_to_rad(_watch_pitch)
+	var flat := cos(pitch) * _watch_distance
+
+	return Vector3(sin(yaw) * flat, -sin(pitch) * _watch_distance, cos(yaw) * flat)
+
+
+## The stick, every frame. The mouse comes in as events instead, and the base
+## actions are read rather than a seat's own — whoever is spectating has the
+## whole window by then, so there is no seat left to be
+func _read_watch_input(delta: float) -> void:
+	var look := Input.get_vector(&"look_left", &"look_right", &"look_up", &"look_down")
+
+	if look != Vector2.ZERO:
+		_turn_by(look.x * WATCH_TURN * delta * Settings.controller_sensitivity,
+			look.y * WATCH_TURN * delta * Settings.controller_sensitivity)
+
+	var push := Input.get_axis(&"move_forward", &"move_back")
+	if not is_zero_approx(push):
+		_zoom_by(push * WATCH_ZOOM_RATE * delta)
+
+
+func _turn_by(yaw: float, pitch: float) -> void:
+	_watch_yaw = wrapf(_watch_yaw - yaw, -180.0, 180.0)
+	_watch_pitch = clampf(_watch_pitch - pitch, WATCH_PITCH_LIMITS.x, WATCH_PITCH_LIMITS.y)
+
+
+func _zoom_by(step: float) -> void:
+	_watch_distance = clampf(_watch_distance + step, WATCH_NEAR, WATCH_FAR)
+
+
+## Turning with the mouse, but only while a button is held. The standings and
+## the two arrows are sitting underneath and have to stay clickable, so the
+## pointer is never taken away
+func _unhandled_input(event: InputEvent) -> void:
+	if _watching == 0:
+		return
+
+	if event is InputEventMouseButton:
+		var button := event as InputEventMouseButton
+
+		match button.button_index:
+			MOUSE_BUTTON_WHEEL_UP:
+				if button.pressed:
+					_zoom_by(-WATCH_ZOOM_STEP)
+			MOUSE_BUTTON_WHEEL_DOWN:
+				if button.pressed:
+					_zoom_by(WATCH_ZOOM_STEP)
+			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT:
+				_dragging = button.pressed
+
+	elif event is InputEventMouseMotion and _dragging:
+		var moved := (event as InputEventMouseMotion).relative
+		_turn_by(moved.x * WATCH_DRAG * Settings.mouse_sensitivity,
+			moved.y * WATCH_DRAG * Settings.mouse_sensitivity)

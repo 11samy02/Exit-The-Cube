@@ -30,3 +30,16 @@ class_name StatusEffectData
 
 ## Whether the cube is held still entirely for the first moment of it
 @export var stun_seconds: float = 0.0
+
+@export_group("What it looks like")
+
+## How wide the jolt that lands on the cube spreads, in meters. 0 leaves the
+## effect with nothing to see but its badge
+@export var burst_reach: float = 2.2
+
+## How many rings the jolt is drawn as, and the gap between them
+@export var burst_rings: int = 3
+@export var burst_delay: float = 0.07
+
+## Seconds one of those rings takes to run out
+@export var burst_time: float = 0.45

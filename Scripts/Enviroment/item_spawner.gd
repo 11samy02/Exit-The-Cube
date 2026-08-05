@@ -84,21 +84,24 @@ func spawn_items() -> void:
 	room.resize(candidates.size())
 	room.fill(NO_NEIGHBOUR)
 
-	while used_cells.size() < item_count and not candidates.is_empty():
+	var placed := 0
+
+	while placed < item_count and not candidates.is_empty():
 		var index := _pick_roomiest(room)
 		if index < 0:
 			break
 
 		var cell: Vector2i = candidates[index]
 		_place_item(cell)
+		placed += 1
 
 		candidates.remove_at(index)
 		room.remove_at(index)
 		_close_in_on(candidates, room, cell)
 
-	if used_cells.size() < item_count:
+	if placed < item_count:
 		push_warning("ItemSpawner: the map has room for %d of %d items at %d steps apart" \
-			% [used_cells.size(), item_count, maxi(1, min_distance)])
+			% [placed, item_count, maxi(1, min_distance)])
 
 
 ## Every cell a sphere may stand in: walkable, not the one the key is in, and
@@ -152,13 +155,30 @@ func _close_in_on(candidates: Array[Vector2i], room: PackedInt32Array, placed: V
 			room[i] = mini(room[i], steps)
 
 
+## One sphere in that cell, or one per player in a race everybody reads as their
+## own. They share the cell rather than standing in a ring: each is on its owner's
+## own layer, so every player sees exactly one shell there and it is theirs
 func _place_item(cell: Vector2i) -> void:
-	var item: Node3D = item_scene.instantiate()
-	holder.add_child(item)
-	item.global_position = _cell_to_world(cell)
+	var owners := _owner_count()
 
-	spawned_items.append(item)
-	used_cells.append(cell)
+	for at in range(owners):
+		var item: Node3D = item_scene.instantiate()
+
+		if item is ItemSphere and owners > 1:
+			(item as ItemSphere).owner_seat = at
+
+		holder.add_child(item)
+		item.global_position = _cell_to_world(cell)
+
+		spawned_items.append(item)
+		used_cells.append(cell)
+
+
+## How many sets of spheres the level lays out. One everywhere but a local race,
+## which needs a maze worth of them per person in the room — the bots are ghosts
+## in one of those and take nothing off the floor
+func _owner_count() -> int:
+	return Match.human_count() if Match.is_private_race() else 1
 
 
 ## Puts spheres back while the level runs, one at a time.
@@ -173,7 +193,7 @@ func _process(delta: float) -> void:
 
 	_prune_taken()
 
-	if spawned_items.size() >= item_count:
+	if spawned_items.size() >= item_count * _owner_count():
 		_restock_timer = restock_delay
 		return
 
@@ -203,11 +223,13 @@ func _restock_one() -> void:
 		return
 
 	var cell: Vector2i = free_cells[randi() % free_cells.size()]
+	var before := spawned_items.size()
 	_place_item(cell)
 
-	var sphere := spawned_items[spawned_items.size() - 1] as ItemSphere
-	if sphere != null:
-		sphere.appear()
+	for at in range(before, spawned_items.size()):
+		var sphere := spawned_items[at] as ItemSphere
+		if sphere != null:
+			sphere.appear()
 
 
 ## True when somebody is close enough that a sphere appearing there would be

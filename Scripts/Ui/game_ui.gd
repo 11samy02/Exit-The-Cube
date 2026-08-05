@@ -26,6 +26,7 @@ const SUBTITLE_QUEUE_MAX := 2
 @onready var lesson_icon: TextureRect = %lesson_icon
 @onready var lesson_text: Label = %lesson_text
 @onready var subtitle: Label = %subtitle
+@onready var item_box: Control = $Control/MarginContainer/item_box
 
 ## The action the hint waits for, empty while the banner fades on a timer
 var _lesson_action: StringName = &""
@@ -37,7 +38,11 @@ var _subtitle_queue: Array[String] = []
 var _subtitle_tween: Tween = null
 
 
+## The banner, the key and the death tally are shared in co-op and stay on the
+## window itself. The item slot is not — everybody carries their own, so on a
+## split screen it is drawn inside each player's own piece instead of once here
 func _ready() -> void:
+	item_box.visible = Seats.count() <= 1
 	GameState.key_collected.connect(_on_key_collected)
 	GameState.death_count_changed.connect(_show_deaths)
 	InputIcons.device_changed.connect(_on_device_changed)

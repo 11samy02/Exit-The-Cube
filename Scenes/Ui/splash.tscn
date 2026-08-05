@@ -1,6 +1,6 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene format=3 uid="uid://c1afmyow3wov8"]
 
-[ext_resource type="Script" path="res://Scripts/Ui/splash.gd" id="1_splash"]
+[ext_resource type="Script" uid="uid://kjops1vakvq5" path="res://Scripts/Ui/splash.gd" id="1_splash"]
 [ext_resource type="Shader" uid="uid://o38335ahv2bm" path="res://Assets/shaders/title_bg.gdshader" id="2_bg"]
 [ext_resource type="FontFile" uid="uid://hx07oyjr0bm1" path="res://Assets/Fonts/Orbitron-Variable.ttf" id="3_orbitron"]
 [ext_resource type="FontFile" uid="uid://y8peg4x6b6cg" path="res://Assets/Fonts/Rajdhani-Medium.ttf" id="4_body"]
@@ -38,7 +38,7 @@ font = ExtResource("4_body")
 font_size = 22
 font_color = Color(0.55, 0.52, 0.68, 1)
 
-[node name="Splash" type="Control"]
+[node name="Splash" type="Control" unique_id=1462121604]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -47,7 +47,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_splash")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="." unique_id=649145542]
 material = SubResource("ShaderMaterial_bg")
 layout_mode = 1
 anchors_preset = 15
@@ -57,7 +57,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="Center" type="CenterContainer" parent="." unique_id=1537333140]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -66,14 +66,14 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Stack" type="VBoxContainer" parent="Center"]
+[node name="Stack" type="VBoxContainer" parent="Center" unique_id=1921801326]
 unique_name_in_owner = true
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 34
 alignment = 1
 
-[node name="Logo" type="TextureRect" parent="Center/Stack"]
+[node name="Logo" type="TextureRect" parent="Center/Stack" unique_id=457868360]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(300, 300)
 layout_mode = 2
@@ -82,15 +82,14 @@ texture = ExtResource("5_logo")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="Line" type="Label" parent="Center/Stack"]
+[node name="Line" type="Label" parent="Center/Stack" unique_id=48349512]
 unique_name_in_owner = true
 layout_mode = 2
-mouse_filter = 2
 text = "SAMY ABUAISHEH"
 label_settings = SubResource("LabelSettings_line")
 horizontal_alignment = 1
 
-[node name="Skip" type="Label" parent="."]
+[node name="Skip" type="Label" parent="." unique_id=1175607809]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 7
@@ -104,12 +103,11 @@ offset_right = 320.0
 offset_bottom = -56.0
 grow_horizontal = 2
 grow_vertical = 0
-mouse_filter = 2
 text = "PRESS ANY BUTTON TO SKIP"
 label_settings = SubResource("LabelSettings_skip")
 horizontal_alignment = 1
 
-[node name="Blackout" type="ColorRect" parent="."]
+[node name="Blackout" type="ColorRect" parent="." unique_id=678226596]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15

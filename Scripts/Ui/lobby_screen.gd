@@ -214,6 +214,8 @@ func _build_rules() -> Control:
 	_add_rule(column, "difficulty", "DIFFICULTY")
 	_add_rule(column, "teams", "TEAMS")
 	_add_rule(column, "minutes", "ROUND TIME")
+	_add_rule(column, Bots.COUNT_KEY, "CPU PLAYERS")
+	_add_rule(column, Bots.SKILL_KEY, "CPU SKILL")
 
 	column.add_child(OnlineUi.gap(4))
 	_random_button = OnlineUi.button("SURPRISE US")
@@ -223,13 +225,26 @@ func _build_rules() -> Control:
 	return frame
 
 
+## What that dropdown offers. Only the round's own settings come out of the
+## rulebook; how many CPUs may be added is counted against the room, so a lobby
+## that fills up offers fewer of them
+func _labels_for(key: String) -> Array:
+	match key:
+		Bots.COUNT_KEY:
+			return Bots.count_labels(Online.members.size())
+		Bots.SKILL_KEY:
+			return Bots.skill_labels()
+
+	return RaceRules.labels_for(key)
+
+
 ## Keeps the label, the dropdown and the space under it together, so a setting
 ## the chosen mode has no use for can be taken off the column as one piece
 func _add_rule(column: VBoxContainer, key: String, title: String) -> void:
 	var label := OnlineUi.body(title, 20, OnlineUi.MUTED)
 	column.add_child(label)
 
-	var picker := OnlineUi.choice(RaceRules.labels_for(key), int(Online.settings.get(key, 0)), \
+	var picker := OnlineUi.choice(_labels_for(key), int(Online.settings.get(key, 0)), \
 		Online.is_host)
 	picker.item_selected.connect(_on_rule_picked.bind(key))
 	column.add_child(picker)
@@ -320,6 +335,7 @@ func _show_rules() -> void:
 
 	_show_rule("teams", RaceRules.is_paint(Online.settings))
 	_show_rule("minutes", RaceRules.is_timed(Online.settings))
+	_show_rule(Bots.SKILL_KEY, Bots.count_in(Online.settings, Online.members.size()) > 0)
 	_random_button.disabled = not Online.is_host
 	_wire_rule_focus()
 

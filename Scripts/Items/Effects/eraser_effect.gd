@@ -23,7 +23,7 @@ class_name EraserEffect
 @export var life: float = 20.0
 
 ## Cells a second it travels
-@export var speed: float = 9.0
+@export var speed: float = 7.0
 
 ## How far off a cell counts as reached
 @export var reach: float = 0.6
@@ -59,13 +59,17 @@ var _soaked: Dictionary = {}
 var _generator: MapGenerator = null
 var _tint: Color = Color.WHITE
 
+## Whose roller this is. Every question it asks about sides is asked on behalf
+## of the cube that spent the item, not on behalf of the machine
+var _owner: int = 0
+
 ## How high off the floor the roller's origin has to sit, worked out from the
 ## model rather than guessed
 var _lift: float = 0.0
 
 
 func _start() -> void:
-	if not Online.is_painting():
+	if not Match.is_painting():
 		stop(false)
 		return
 
@@ -74,7 +78,8 @@ func _start() -> void:
 		stop(false)
 		return
 
-	_tint = Online.team_color(Online.team_of(Online.steam.id))
+	_owner = player.account()
+	_tint = Match.team_color(Match.team_of(_owner))
 	_build_roller()
 
 	if _roller == null:
@@ -119,17 +124,17 @@ func _roll(delta: float) -> void:
 
 
 func _wash(cell: Vector2i) -> void:
-	if not _is_enemy_tile(cell, Online.team_of(Online.steam.id)):
+	if not _is_enemy_tile(cell, Match.team_of(_owner)):
 		return
 
-	Online.erase_cell(cell)
+	Match.erase_cell(_owner, cell)
 	_washed += 1
 
 
 ## Picks the next thing to drive at, in the order that makes the item feel like
 ## it is hunting: paint to wash, then somebody to soak, then anywhere at all
 func _retarget() -> void:
-	var mine := Online.team_of(Online.steam.id)
+	var mine := Match.team_of(_owner)
 	var from := _current_cell()
 
 	var route := _route_to(from, _is_enemy_tile.bind(mine))
@@ -169,17 +174,19 @@ func _route_to(from: Vector2i, wanted: Callable) -> Array[Vector2i]:
 
 
 func _is_enemy_tile(cell: Vector2i, mine: int) -> bool:
-	var claim: PaintState.Claim = Online.paint.claims.get(cell, null)
+	var claim: PaintState.Claim = Match.paint().claims.get(cell, null)
 	return claim != null and claim.team != mine
 
 
 ## True where somebody from another side is standing
 func _holds_enemy(cell: Vector2i, mine: int) -> bool:
-	for id: int in Online.runners:
-		if id == Online.steam.id or Online.team_of(id) == mine:
+	var runners := Match.runners()
+
+	for id: int in runners:
+		if id == _owner or Match.team_of(id) == mine:
 			continue
 
-		var runner: Dictionary = Online.runners[id]
+		var runner: Dictionary = runners[id]
 		if not bool(runner["placed"]) or bool(runner["dead"]):
 			continue
 
@@ -332,19 +339,20 @@ func _face(target: Vector3) -> void:
 
 ## Anybody on another side who is close enough gets soaked, once each
 func _soak_anybody_near() -> void:
-	var mine := Online.team_of(Online.steam.id)
+	var runners := Match.runners()
+	var mine := Match.team_of(_owner)
 
-	for id: int in Online.runners:
-		if id == Online.steam.id or Online.team_of(id) == mine or _soaked.has(id):
+	for id: int in runners:
+		if id == _owner or Match.team_of(id) == mine or _soaked.has(id):
 			continue
 
-		var runner: Dictionary = Online.runners[id]
+		var runner: Dictionary = runners[id]
 		if not bool(runner["placed"]) or bool(runner["dead"]):
 			continue
 
 		if _roller.global_position.distance_to(runner["position"] as Vector3) <= soak_range:
 			_soaked[id] = true
-			Online.send_status(id, soak_effect, soak_seconds)
+			Match.send_status(id, soak_effect, soak_seconds)
 
 
 func _current_cell() -> Vector2i:

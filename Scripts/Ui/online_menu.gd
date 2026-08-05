@@ -37,8 +37,13 @@ var _busy: bool = false
 var _quip_timer: float = QUIP_INTERVAL
 
 
+## Online is always one cube per machine, so whatever the splitscreen left in
+## the seat table is put away before the lobby is opened
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Seats.clear()
+	Seats.claim_keyboard()
+	Seats.lock()
 
 	add_child(OnlineUi.background())
 	move_child(get_child(get_child_count() - 1), 0)

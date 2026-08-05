@@ -16,6 +16,8 @@
 [ext_resource type="PackedScene" path="res://Scenes/Player/screen_shake.tscn" id="14_shake"]
 [ext_resource type="Script" uid="uid://cep8jgjufh6pq" path="res://Scripts/Player/player_spawn.gd" id="15_spawn"]
 [ext_resource type="AudioStream" uid="uid://dm54ixoud8jkt" path="res://Assets/Sounds/Power Up.wav" id="16_spawnsfx"]
+[ext_resource type="Script" path="res://Scripts/Player/player.gd" id="17_player"]
+[ext_resource type="Script" path="res://Scripts/Items/player_inventory.gd" id="18_inventory"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sewcp"]
 
@@ -197,6 +199,7 @@ material = SubResource("StandardMaterial3D_dust")
 size = Vector3(0.12, 0.12, 0.12)
 
 [node name="player" type="CharacterBody3D" unique_id=63181298 groups=["player"]]
+script = ExtResource("17_player")
 
 [node name="Scripts" type="Node" parent="." unique_id=268413166]
 
@@ -262,6 +265,9 @@ light = NodePath("../../SpawnLight")
 spawn_sound = NodePath("../../SpawnSound")
 camera_rig = NodePath("../Camera")
 screen_shake = NodePath("../../ScreenShake")
+
+[node name="Inventory" type="Node" parent="Scripts"]
+script = ExtResource("18_inventory")
 
 [node name="mesh" type="MeshInstance3D" parent="." unique_id=1582573964]
 mesh = SubResource("ArrayMesh_k13sg")

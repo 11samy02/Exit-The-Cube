@@ -5,9 +5,11 @@ extends CanvasLayer
 ## while it runs, the ranking once this cube is out, and the bar that steers the
 ## camera around the ones who are still in there.
 ##
-## It is added to the map by the Online node rather than sitting in the map
+## It is added to the map by the match router rather than sitting in the map
 ## scene, so the map scene itself knows nothing about any of this and still
 ## opens and plays on its own
+
+const TITLE_SCENE := "res://Scenes/Ui/title_screen.tscn"
 
 ## Above the game UI and above the pause menu, below the scene transition. The
 ## race panel is the one thing in a map that must not have something drawn over
@@ -29,10 +31,6 @@ const STRIP_MARGIN := 26.0
 ## is how far the column titles over it have to be pushed in to line up
 const ROW_INSET := 18
 
-## How wide the card that counts a death down is. Fixed so the number inside it
-## does not make the whole thing jump between one digit and two
-const DOWN_CARD_WIDTH := 380.0
-
 ## How far the spectator bar sits off the bottom. Clear of the level banner the
 ## game UI puts down there, the two of them are up at the same time
 const WATCH_MARGIN := 130.0
@@ -52,9 +50,7 @@ var _watch_bar: Control = null
 var _watch_name: Label = null
 var _watch_item: Label = null
 var _watch_back: Button = null
-var _down_card: PanelContainer = null
-var _down_clock: Label = null
-var _down_cost: Label = null
+var _down_card: DownCard = null
 
 var _tick: float = 0.0
 
@@ -75,11 +71,18 @@ func _ready() -> void:
 	_build_down_card()
 	_apply_theme()
 
-	Online.standings_updated.connect(_redraw)
-	Online.paint_changed.connect(_redraw)
-	Online.round_over.connect(_on_round_over)
+	Match.standings_updated.connect(_redraw)
+	Match.paint_changed.connect(_redraw)
+	Match.round_over.connect(_on_round_over)
 	GameState.run_finished.connect(_on_finished)
 	_redraw()
+
+
+## The cube this panel is written for. Online there is only ever one on this
+## machine; on a splitscreen the strip belongs to the whole window and the first
+## seat is who it speaks to, with anything per seat living in the seat's own HUD
+func _me() -> int:
+	return Match.account_of_seat(0)
 
 
 ## The clock ran out on a painting round. Everybody sees it at once, nobody rode
@@ -94,7 +97,7 @@ func _on_round_over() -> void:
 
 
 func _process(delta: float) -> void:
-	if Online.is_painting():
+	if Match.serves_penalty():
 		_draw_down_card()
 
 	_tick -= delta
@@ -137,65 +140,21 @@ func _build_standings() -> void:
 	column.add_child(_link)
 
 
-## The card that comes up while this cube is sitting out a death.
-##
-## A player who bursts and then waits five seconds looking at an empty corridor
-## has no way of telling a penalty from a hang. This says how long is left, what
-## it cost, and that the cube is coming back
+## The card that comes up while this cube is sitting out a death
 func _build_down_card() -> void:
-	var frame := PanelContainer.new()
-	frame.visible = false
-	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	frame.custom_minimum_size = Vector2(DOWN_CARD_WIDTH, 0)
-	frame.add_theme_stylebox_override("panel", _down_style())
-	add_child(frame)
-	_pin(frame, 0.5, 0.5, Control.GROW_DIRECTION_BOTH, Control.GROW_DIRECTION_BOTH, Vector2.ZERO)
-	_down_card = frame
-
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 8)
-	frame.add_child(column)
-
-	var title := OnlineUi.heading("RESPAWN IN", 24, OnlineUi.WAITING)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(title)
-
-	_down_clock = OnlineUi.heading("", 82, OnlineUi.TEXT)
-	_down_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(_down_clock)
-
-	_down_cost = OnlineUi.body("", 21, OnlineUi.MUTED)
-	_down_cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(_down_cost)
+	_down_card = DownCard.new()
+	_down_card.center_in(self)
 
 
-## The card's own frame rather than the shared one. The panels elsewhere are
-## built for rows of text and their padding is measured for that; a single
-## eighty point number inside the same margins sits against its own border
-func _down_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.04, 0.03, 0.08, 0.94)
-	style.border_color = OnlineUi.WAITING
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(12)
-	style.content_margin_left = 40.0
-	style.content_margin_right = 40.0
-	style.content_margin_top = 22.0
-	style.content_margin_bottom = 26.0
-	return style
-
-
-## Counts the wait down, and says what the death took. The number is read off
-## the same clock the cube is serving, so it cannot drift away from it
+## Counts the wait down. Only while one cube is being played here — on a split
+## screen the wait is a different one per player and belongs in each seat's own
+## piece of the window, which is where the seat HUD puts the same card
 func _draw_down_card() -> void:
-	var left := Online.penalty_left()
-	_down_card.visible = left > 0.0
-
-	if not _down_card.visible:
+	if Match.is_split():
+		_down_card.visible = false
 		return
 
-	_down_clock.text = "%d" % maxi(ceili(left), 1)
-	_down_cost.text = "%d tiles lost" % Online.mode().death_tile_penalty
+	_down_card.show_wait(Match.penalty_left(_me()), DownCard.cost_line())
 
 
 ## Sticks a control to one corner and lets it size itself from there. Handing a
@@ -352,13 +311,13 @@ func _apply_theme() -> void:
 
 
 func _redraw() -> void:
-	if Online.is_painting():
+	if Match.is_painting():
 		_draw_teams()
 	else:
-		_draw_strip(Online.standings())
+		_draw_strip(Match.standings())
 
 	if _panel_root.visible:
-		_draw_panel(Online.standings())
+		_draw_panel(Match.standings())
 
 	if _spectating:
 		_show_watched()
@@ -372,15 +331,15 @@ func _draw_teams() -> void:
 		_standings.remove_child(child)
 		child.queue_free()
 
-	var counts := Online.paint.tally()
-	var total := maxi(Online.paint.claims.size(), 1)
-	var mine := Online.team_of(Online.steam.id)
+	var counts := Match.paint().tally()
+	var total := maxi(Match.paint().claims.size(), 1)
+	var mine := Match.team_of(_me())
 
-	for team in range(RaceRules.team_count(Online.settings)):
+	for team in range(RaceRules.team_count(Match.settings())):
 		var held := int(counts.get(team, 0))
 		_standings.add_child(_build_team_row(team, held, float(held) / float(total), team == mine))
 
-	_strip_note.text = OnlineUi.format_time(Online.round_left())
+	_strip_note.text = OnlineUi.format_time(Match.round_left())
 	_draw_link()
 
 
@@ -388,7 +347,7 @@ func _draw_teams() -> void:
 ## share is what says who is winning — a raw count means nothing until you know
 ## what the other numbers are
 func _build_team_row(team: int, held: int, share: float, mine: bool) -> Control:
-	var color := Online.team_color(team)
+	var color := Match.team_color(team)
 
 	var frame := PanelContainer.new()
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -433,6 +392,12 @@ func _draw_strip(standings: Array) -> void:
 ## back is a line that never opened; both numbers climbing with a board that is
 ## still wrong is something further up entirely
 func _draw_link() -> void:
+	if Match.kind != Match.Kind.ONLINE:
+		_link.visible = false
+		return
+
+	_link.visible = true
+
 	var report := Online.link_report()
 	var peers := int(report["peers"])
 
@@ -459,7 +424,7 @@ func _draw_link() -> void:
 ## in its own frame, so the one thing anybody actually looks for mid corridor —
 ## am I still up there — is a glance and not a read
 func _build_strip_row(runner: Dictionary) -> Control:
-	var mine := int(runner["id"]) == Online.steam.id
+	var mine := Match.is_mine(int(runner["id"]))
 	var place := int(runner["rank"])
 	var accent := _place_color(place)
 
@@ -519,20 +484,21 @@ func _draw_panel(standings: Array) -> void:
 		_panel_rows.remove_child(child)
 		child.queue_free()
 
-	if Online.is_painting():
+	if Match.is_painting():
 		_draw_paint_result()
 	else:
 		for runner: Dictionary in standings:
 			_panel_rows.add_child(_build_panel_row(runner))
 
-	_spectate_button.visible = Online.anyone_running() and not Online.is_painting()
+	_spectate_button.visible = Match.anyone_running() and not Match.is_painting()
 	_lobby_button.visible = true
+	_lobby_button.text = "BACK TO LOBBY" if Match.kind == Match.Kind.ONLINE else "BACK TO TITLE"
 	_lobby_note.text = _lobby_hint()
 
 
 func _build_panel_row(runner: Dictionary) -> Control:
 	var place := int(runner["rank"])
-	var mine := int(runner["id"]) == Online.steam.id
+	var mine := Match.is_mine(int(runner["id"]))
 	var accent := _place_color(place)
 
 	var frame := OnlineUi.panel(accent if mine else Color(accent, 0.5), 0.5 if mine else 0.25)
@@ -564,16 +530,16 @@ func _build_panel_row(runner: Dictionary) -> Control:
 ## a player can paint half the map and lose it all to the other side in the last
 ## minute. The per player count is what they actually did
 func _draw_paint_result() -> void:
-	var counts := Online.paint.tally()
+	var counts := Match.paint().tally()
 	var sides: Array = []
 
-	for team in range(RaceRules.team_count(Online.settings)):
+	for team in range(RaceRules.team_count(Match.settings())):
 		sides.append({"team": team, "held": int(counts.get(team, 0))})
 
 	sides.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return int(a["held"]) > int(b["held"]))
 
-	var total := maxi(Online.paint.claims.size(), 1)
+	var total := maxi(Match.paint().claims.size(), 1)
 
 	for at in range(sides.size()):
 		var side: Dictionary = sides[at]
@@ -586,13 +552,14 @@ func _draw_paint_result() -> void:
 
 ## Everybody on that side, the one who painted the most first
 func _players_of(team: int) -> Array:
+	var runners := Match.runners()
 	var found: Array = []
 
-	for id: int in Online.runners:
-		if Online.team_of(id) == team:
-			var runner: Dictionary = Online.runners[id].duplicate()
-			runner["painted"] = int(Online.paint.painted_total.get(id, 0))
-			runner["held"] = Online.paint.held_by(id)
+	for id: int in runners:
+		if Match.team_of(id) == team:
+			var runner: Dictionary = runners[id].duplicate()
+			runner["painted"] = int(Match.paint().painted_total.get(id, 0))
+			runner["held"] = Match.paint().held_by(id)
 			found.append(runner)
 
 	found.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -602,7 +569,7 @@ func _players_of(team: int) -> Array:
 
 
 func _build_result_team(place: int, team: int, held: int, share: float) -> Control:
-	var color := Online.team_color(team)
+	var color := Match.team_color(team)
 	var frame := OnlineUi.panel(color, 0.35)
 
 	var row := HBoxContainer.new()
@@ -618,7 +585,7 @@ func _build_result_team(place: int, team: int, held: int, share: float) -> Contr
 
 
 func _build_result_player(runner: Dictionary) -> Control:
-	var mine := int(runner["id"]) == Online.steam.id
+	var mine := Match.is_mine(int(runner["id"]))
 	var deaths := int(runner["deaths"])
 
 	var frame := PanelContainer.new()
@@ -642,7 +609,7 @@ func _build_result_player(runner: Dictionary) -> Control:
 ## The line under the buttons. A painting round is over for everybody at the
 ## same moment, so there is nobody left to leave behind and nothing to say
 func _lobby_hint() -> String:
-	if Online.is_painting() or not Online.anyone_running():
+	if Match.is_painting() or not Match.anyone_running():
 		return ""
 
 	return "the others keep racing without you"
@@ -682,13 +649,13 @@ func _show_panel() -> void:
 	_watch_bar.visible = false
 	_spectating = false
 
-	if Online.is_painting():
+	if Match.is_painting():
 		_panel_title.text = _paint_title()
 		_panel_comment.text = "five minutes, one floor, and this is what it looks like"
 	else:
-		var rank := Online.local_rank()
+		var rank := Match.rank_of(_me())
 		_panel_title.text = _title_for(rank)
-		_panel_comment.text = Quips.pick("online_result", 			OnlineQuips.result_pool(rank, Online.finisher_count()))
+		_panel_comment.text = Quips.pick("online_result", 			OnlineQuips.result_pool(rank, Match.finisher_count()))
 
 	_redraw()
 
@@ -702,12 +669,12 @@ func _show_panel() -> void:
 
 ## Who took the floor, from the point of view of the player reading it
 func _paint_title() -> String:
-	var winner := Online.paint.leader()
+	var winner := Match.paint().leader()
 
 	if winner < 0:
 		return "A DEAD HEAT"
 
-	return "YOUR TEAM TOOK IT" if winner == Online.team_of(Online.steam.id) 		else "%s TOOK IT" % RaceRules.team_name(winner)
+	return "YOUR TEAM TOOK IT" if winner == Match.team_of(_me()) 		else "%s TOOK IT" % RaceRules.team_name(winner)
 
 
 func _title_for(rank: int) -> String:
@@ -767,11 +734,11 @@ func _show_watched() -> void:
 		return
 
 	var watching := field.watching()
-	if watching == 0 or not Online.runners.has(watching):
+	if watching == 0 or not Match.runners().has(watching):
 		_watch_name.text = "nobody left in the maze"
 		return
 
-	var runner: Dictionary = Online.runners[watching]
+	var runner: Dictionary = Match.runners()[watching]
 	var deaths := int(runner["deaths"])
 	var held := String(runner.get("item", ""))
 
@@ -783,10 +750,17 @@ func _show_watched() -> void:
 	_watch_item.text = "carrying  %s" % held.to_upper() if not held.is_empty() else "empty handed"
 
 
-## Steps this player back to the lobby and nobody else. The others are still in
-## their mazes, and being finished is not a reason to end their race
+## Steps this player back out of the round and nobody else. Online the others
+## are still in their mazes and being finished is no reason to end their race;
+## on one screen there is nowhere to step back to but the title
 func _on_lobby_pressed() -> void:
-	Online.leave_race()
+	if Match.kind == Match.Kind.ONLINE:
+		Online.leave_race()
+		return
+
+	Match.stop()
+	Seats.clear()
+	Transition.change_scene(TITLE_SCENE)
 
 
 func _field() -> GhostField:

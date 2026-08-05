@@ -33,25 +33,7 @@ signal lobby_list_ready(lobbies: Array)
 ## The host started the race, the map is being swapped in
 signal race_launched
 
-## A runner died, took a sphere, or made it out
-signal standings_updated
-
-## A tile changed hands, anywhere on the map
-signal paint_changed
-
-## The painting round ran out of time
-signal round_over
-
-const MAP_SCENE := "res://Scenes/Enviroment/map.tscn"
 const LOBBY_SCENE := "res://Scenes/Ui/lobby_screen.tscn"
-const TITLE_SCENE := "res://Scenes/Ui/title_screen.tscn"
-
-## The two nodes a race puts into the map. They are loaded by path when they are
-## needed rather than preloaded by name: both of them talk back to this autoload,
-## and naming them up here would be a circle neither script could compile out of
-const GHOST_FIELD := "res://Scripts/Online/ghost_field.gd"
-const RACE_OVERLAY := "res://Scripts/Ui/race_overlay.gd"
-const PAINT_FIELD := "res://Scripts/Online/paint_field.gd"
 
 
 ## How many cubes fit in one maze
@@ -145,10 +127,14 @@ const MSG_ERASE := 9
 ## what it can do
 const MSG_STATUS := 10
 
-## How many cells at a team's end of the maze a player may come back at. Wide
-## enough that a death does not put them back on the tile they just left, tight
-## enough that they are still on their own side
-const RESPAWN_SPREAD := 40
+## Where one of the host's CPUs is and how its run is going, in one message.
+##
+## It has to name the cube it is about, because the sender is the host and not
+## the runner — which is also the only authority check there is on it: a packet
+## about a bot that did not come from whoever owns the lobby is dropped. And it
+## carries the whole runner rather than splitting position from progress, since
+## a bot has no input lag to hide and nothing to gain from the finer rate
+const MSG_BOT := 11
 
 ## How often a cube tells the others where it is. Fifteen a second is enough for
 ## a ghost the interpolation smooths anyway, and it keeps twelve players inside
@@ -188,17 +174,9 @@ var race_seed: int = 0
 ## { "id": int, "name": String, "ready": bool, "host": bool }
 var members: Array[Dictionary] = []
 
-## Every cube in the race by its account, whether it is still on this machine's
-## screen or not. The ghosts are drawn off these and so is the ranking
-var runners: Dictionary = {}
-
-## The level the race is run on, built once when the race starts and kept over
-## every death, so the maze a player comes back into is the one they left
-var _level: MapData = null
-
-## True once the clock was put back to zero for this race. A death rebuilds the
-## map and would otherwise hand the runner a fresh start on the timer as well
-var _clock_zeroed: bool = false
+## What carries a local change out to the others. Handed to the router when the
+## race starts, so the round itself never learns there is a wire under it
+var wire := Wire.new()
 
 ## Seconds until the next ghost packet goes out
 var _send_timer: float = 0.0
@@ -209,38 +187,10 @@ var _progress_timer: float = 0.0
 ## Seconds until the nearby blade positions go out again
 var _saw_timer: float = 0.0
 
-## Who owns which tile of the floor. Empty outside the painting mode
-var paint := PaintState.new()
-
-## Which side each account is on, worked out from the seed rather than sent
-var teams: Dictionary = {}
-
-## What each side is drawn in, rolled per round
-var team_colors: Array[Color] = []
-
-## Where each account comes into the maze, one cell each and no two the same
-var spawns: Dictionary = {}
-
-## The cells this cube may come back at, and the last one it used
-var _respawn_pool: Array = []
-var _last_respawn: Vector2i = Vector2i(-1, -1)
-
-## Tiles this cube has taken, oldest first, with the stamp each was taken under.
-## A death gives the last few of them back, so the order matters
-var _my_tiles: Array = []
-
 ## Claims waiting to go out together on the next tick
 var _pending_paint: Array = []
 
 var _paint_timer: float = 0.0
-
-## True once the clock ran out and the result is on screen
-var _round_ended: bool = false
-
-## When this cube is allowed back into the maze, in seconds since the game
-## started. Zero while it is standing. The panel counts down against it, so the
-## number on screen and the wait the cube is actually serving are the same one
-var _back_at: float = 0.0
 
 ## Accounts Steam could not open a line to, by what it said about it. Shown on
 ## the race panel, because a player who cannot be reached at all is not a bug in
@@ -269,9 +219,35 @@ var _received: int = 0
 var _hello_timer: float = 0.0
 
 
+## The wire under an online round.
+##
+## The router hands every change one of our cubes makes to a transport, and a
+## round played on one screen simply has none — that is the whole of what makes
+## the party mode the same code as this one. Everything in here is one line: the
+## deciding already happened, this only carries it out
+class Wire extends MatchTransport:
+	var line: Node = null
+
+	func send_paint(_account: int, cell: Vector2i, stamp: float) -> void:
+		line.queue_paint(cell, stamp)
+
+	func send_unpaint(_account: int, tiles: Array) -> void:
+		line.push_unpaint(tiles)
+
+	func send_erase(cell: Vector2i) -> void:
+		line.push_erase(cell)
+
+	func send_status(account: int, effect: String, seconds: float) -> void:
+		line.push_status(account, effect, seconds)
+
+	func send_hit(account: int) -> void:
+		line.push_hit(account)
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_process(false)
+	wire.line = self
 	GameState.run_finished.connect(_on_run_finished)
 
 
@@ -350,10 +326,8 @@ func _process(delta: float) -> void:
 	_send_local_progress(delta)
 	_drop_stale_ghosts()
 
-	if is_painting():
+	if Match.is_painting():
 		_tick_paint(delta)
-		_tick_hunt()
-		_tick_round()
 
 
 ## Opens a lobby with this machine as its host
@@ -361,8 +335,23 @@ func host_lobby() -> void:
 	if not steam.running:
 		return
 
-	settings = RaceRules.default_settings()
+	settings = default_rules()
 	steam.create_lobby(MAX_PLAYERS)
+
+
+## What a fresh lobby is set to. The rules of the round come out of the rulebook
+## and the two about the CPUs are added here, because a lobby is the one place
+## they may be changed while people are already in it
+func default_rules() -> Dictionary:
+	var rules := RaceRules.default_settings()
+	rules[Bots.COUNT_KEY] = 0
+	rules[Bots.SKILL_KEY] = Bots.default_skill()
+	return rules
+
+
+## Every setting a lobby carries, which is what is written to it and read back
+func _rule_keys() -> Array:
+	return default_rules().keys()
 
 
 func join_lobby(lobby: int) -> void:
@@ -374,8 +363,8 @@ func join_lobby(lobby: int) -> void:
 ## hands the lobby to somebody else, Steam picks who
 func leave_lobby() -> void:
 	if lobby_id != 0:
-		for runner: int in runners:
-			steam.close_session(runner)
+		for member in members:
+			steam.close_session(int(member["id"]))
 
 		steam.leave_lobby(lobby_id)
 
@@ -425,62 +414,6 @@ func in_lobby() -> bool:
 
 func is_racing() -> bool:
 	return phase == Phase.RACING
-
-
-## True while a painting round is on. Every part of the paint mode asks this
-## rather than the mode setting, so nothing of it can run in a lobby or a race
-func is_painting() -> bool:
-	return phase == Phase.RACING and RaceRules.is_paint(settings)
-
-
-## Which side that account is on, 0 when the mode has no teams
-func team_of(account: int) -> int:
-	return int(teams.get(account, 0))
-
-
-## The colour that account is drawn in. In a team mode everybody on a side is
-## the same colour on purpose — a round is read by where the colours are, and
-## twelve separate hues would say nothing about who is winning
-func color_of(account: int) -> Color:
-	if RaceRules.is_paint(settings):
-		return team_color(team_of(account))
-
-	return GhostField.ghost_color(account)
-
-
-## What a side is drawn in this round. Rolled once when the teams are drawn, so
-## every screen and every tile agrees without asking again
-func team_color(team: int) -> Color:
-	if team < 0 or team >= team_colors.size():
-		return Color.WHITE
-
-	return team_colors[team]
-
-
-## The mode this round is being played under
-func mode() -> RaceMode:
-	return RaceRules.mode_of(settings)
-
-
-## Seconds a broken blade stays down, 0 outside a race or in a mode that keeps
-## them broken
-func saw_revive_seconds() -> float:
-	return mode().saw_revive_seconds if is_racing() else 0.0
-
-
-## Seconds left in the painting round, 0 once it is over
-func round_left() -> float:
-	return maxf(RaceRules.round_seconds(settings) - GameState.run_time, 0.0)
-
-
-func round_ended() -> bool:
-	return _round_ended
-
-
-## The level the race is run on. The map scene builds from this instead of from
-## the campaign while a race is on
-func level() -> MapData:
-	return _level
 
 
 ## Marks this machine ready or not. The host has a start button instead and is
@@ -562,8 +495,7 @@ func leave_race() -> void:
 		return
 
 	phase = Phase.LOBBY
-	_level = null
-	runners.clear()
+	Match.stop()
 	GameState.is_running = false
 	set_ready(false)
 	Transition.change_scene(LOBBY_SCENE)
@@ -573,158 +505,6 @@ func leave_race() -> void:
 func _round() -> int:
 	var value := steam.lobby_data(lobby_id, ROUND_KEY)
 	return int(value) if not value.is_empty() else 0
-
-
-## Called by the map once it has finished building itself. This is where the
-## ghosts and the race panel are put into the scene, so the map scene itself
-## carries nothing online at all and still works opened on its own
-func attach_to_map(map: Node) -> void:
-	if not is_racing() or map == null:
-		return
-
-	map.add_child(_build(GHOST_FIELD))
-	map.add_child(_build(RACE_OVERLAY))
-
-	if RaceRules.is_paint(settings):
-		map.add_child(_build(PAINT_FIELD))
-
-	_zero_clock()
-
-
-## One of the two race nodes, built from its script. Every one of them knows
-## what it extends, so nothing here has to
-func _build(script_path: String) -> Node:
-	var script: GDScript = load(script_path)
-	var node: Node = script.new()
-	node.name = script_path.get_file().get_basename().to_pascal_case()
-	return node
-
-
-## The clock is put back to zero on the first frame after the maze was built,
-## not when the race was started. A gigantic map takes a moment to generate and
-## the machine that took longest must not start the race already behind.
-##
-## Only the first map of the race is timed from zero. The ones a death rebuilds
-## carry the time that has already been spent, that is what a death costs
-func _zero_clock() -> void:
-	if _clock_zeroed:
-		return
-
-	_clock_zeroed = true
-	await get_tree().process_frame
-	await get_tree().process_frame
-	GameState.run_time = 0.0
-	GameState.level_start_time = 0.0
-
-
-## The ranking. Fewest deaths first, then the fastest time, then the most
-## spheres — and a cube that matches another on all three shares its place, so
-## two identical runs are both first rather than one of them being second by the
-## order they happened to be listed in.
-##
-## Whoever is still in the maze is listed under everybody who made it out and
-## gets a place of their own down there, worked out from how the run is going
-## rather than from a time nobody has yet. That is what makes the board worth
-## looking at while the race is still on: a place that only appears at the end
-## is a scoreboard nobody can race against
-func standings() -> Array:
-	var done: Array = []
-	var running: Array = []
-
-	for id: int in runners:
-		var runner: Dictionary = runners[id].duplicate()
-		if bool(runner["finished"]):
-			done.append(runner)
-		else:
-			running.append(runner)
-
-	done.sort_custom(_is_ahead)
-	running.sort_custom(_is_leading)
-	_rank(done, 0, _is_ahead)
-	_rank(running, done.size(), _is_leading)
-
-	return done + running
-
-
-## How many cubes are out of the maze already
-func finisher_count() -> int:
-	var count := 0
-
-	for id: int in runners:
-		if bool(runners[id]["finished"]):
-			count += 1
-
-	return count
-
-
-## Where this machine stands on the board right now, 0 while it is in no race
-func local_rank() -> int:
-	for runner in standings():
-		if int(runner["id"]) == steam.id:
-			return int(runner["rank"])
-
-	return 0
-
-
-## True once this cube is out of the maze and the race panel has the screen. The
-## map is still running underneath it, so whatever would normally take the mouse
-## back off a menu has to ask first
-func showing_results() -> bool:
-	if not is_racing():
-		return false
-
-	var me: Dictionary = runners.get(steam.id, {})
-	return not me.is_empty() and bool(me["finished"])
-
-
-## True while somebody is still walking around in there, which is what makes
-## spectating worth offering
-func anyone_running() -> bool:
-	for id: int in runners:
-		if not bool(runners[id]["finished"]):
-			return true
-
-	return false
-
-
-## The one comparison the finished ranking is built on
-func _is_ahead(a: Dictionary, b: Dictionary) -> bool:
-	if int(a["deaths"]) != int(b["deaths"]):
-		return int(a["deaths"]) < int(b["deaths"])
-
-	if not is_equal_approx(float(a["time"]), float(b["time"])):
-		return float(a["time"]) < float(b["time"])
-
-	return int(a["items"]) > int(b["items"])
-
-
-## The same comparison for the cubes that are still in there, where the time is
-## the one number nobody has yet: a run only has a time once the elevator is at
-## the top. The key stands in for it — carrying it means the whole first half of
-## the maze is behind you, which is the only progress the others can be told
-## about without a packet on every corner
-func _is_leading(a: Dictionary, b: Dictionary) -> bool:
-	if bool(a["has_key"]) != bool(b["has_key"]):
-		return bool(a["has_key"])
-
-	if int(a["deaths"]) != int(b["deaths"]):
-		return int(a["deaths"]) < int(b["deaths"])
-
-	return int(a["items"]) > int(b["items"])
-
-
-## Walks the sorted list and hands out places, counting on from wherever the
-## group above it ended. Two runs that are level on every count the comparison
-## looks at get the same number, and the one after them skips the places they
-## took up, the way a podium with two golds has no silver
-func _rank(sorted: Array, from: int, comparison: Callable) -> void:
-	for at in range(sorted.size()):
-		var runner: Dictionary = sorted[at]
-		var above: Dictionary = sorted[at - 1] if at > 0 else {}
-		var level: bool = not above.is_empty() and not comparison.call(above, runner) \
-			and not comparison.call(runner, above)
-
-		runner["rank"] = int(above["rank"]) if level else from + at + 1
 
 
 func _on_lobby_created(result: int, lobby: int) -> void:
@@ -864,7 +644,7 @@ func _on_session_failed(reason: int, remote: int, state: int, message: String) -
 ## The four settings, read back off the lobby. The host wrote them, so this is
 ## also how the host's own copy is kept honest after a reconnect
 func _read_lobby_data() -> void:
-	for key: String in RaceRules.default_settings():
+	for key: String in _rule_keys():
 		var value := steam.lobby_data(lobby_id, key)
 		if not value.is_empty():
 			settings[key] = int(value)
@@ -924,6 +704,7 @@ func _keep_sessions_warm(delta: float) -> void:
 ## going out with nothing coming back is a line that never opened, and both
 ## numbers climbing means the trouble is somewhere else entirely
 func link_report() -> Dictionary:
+	var runners := Match.runners()
 	var open := 0
 
 	for id: int in runners:
@@ -939,18 +720,33 @@ func link_report() -> Dictionary:
 	}
 
 
+## Hands the round over to the router and walks into the maze. Everything about
+## the rules from here on is the router's — this node only carries the traffic
 func _enter_race() -> void:
 	if phase == Phase.RACING:
 		return
 
 	phase = Phase.RACING
 	set_process(true)
-	_level = RaceRules.build_level(settings, race_seed)
-	_clock_zeroed = false
 	_send_timer = 0.0
+	_paint_timer = 0.0
+	_pending_paint.clear()
 	_sent_progress.clear()
-	_build_runners()
-	_draw_teams()
+	_refresh_members()
+
+	var accounts: Array[int] = []
+	for member in members:
+		accounts.append(int(member["id"]))
+
+	var bots := Bots.count_in(settings, members.size())
+	accounts.append_array(Bots.accounts_for(bots))
+
+	Match.start_online(settings, race_seed, accounts, steam.id, wire,
+		Bots.accounts_for(bots) if is_host else [] as Array[int])
+
+	for member in members:
+		Match.session.runners[member["id"]]["name"] = member["name"]
+
 	set_ready(false)
 
 	Levels.stop()
@@ -959,117 +755,35 @@ func _enter_race() -> void:
 	Quips.say_next(Quips.pick("online_race_start", OnlineQuips.RACE_START))
 
 	race_launched.emit()
-	Transition.change_scene(MAP_SCENE)
+	Transition.change_scene(Match.MAP_SCENE)
 
 
-## Splits the room into sides and clears the floor. Both the teams and the cells
-## each player comes in on are worked out from the accounts and the seed, so
-## every machine reaches the same answer without a word being sent about it.
-##
-## The spawn cells need the maze, which is not built yet at this point — they are
-## filled in by the map once it has one, through spawn_cells_from
-func _draw_teams() -> void:
-	paint.clear()
-	teams.clear()
-	team_colors.clear()
-	spawns.clear()
-	_respawn_pool.clear()
-	_last_respawn = Vector2i(-1, -1)
-	_my_tiles.clear()
-	_pending_paint.clear()
-	_paint_timer = 0.0
-	_round_ended = false
-
-	if not RaceRules.is_paint(settings):
-		return
-
-	var sides := RaceRules.team_count(settings)
-	teams = TeamDraw.teams_of(runners.keys(), sides, race_seed)
-	team_colors = RaceRules.roll_team_colors(race_seed, sides)
-
-
-## Hands out the starting cells once the maze exists. Called by the map, which
-## is the first thing that knows where the corridors are
-func spawn_cells_from(cells: Array, size: int) -> void:
-	if not RaceRules.is_paint(settings) or not spawns.is_empty():
-		return
-
-	spawns = TeamDraw.spawns_of(teams, RaceRules.team_count(settings), cells, size)
-	_respawn_pool = TeamDraw.region_of(team_of(steam.id), cells, size, RESPAWN_SPREAD)
-
-
-## Where this cube comes in, or a cell of -1 when the mode does not place people
-func spawn_cell() -> Vector2i:
-	return spawns.get(steam.id, Vector2i(-1, -1))
-
-
-## Where this cube comes back after a death: anywhere in its own end of the
-## maze, and never twice in a row on the same tile. Coming back where you fell
-## is coming back onto floor you had already painted, so the walk out is the
-## whole of what the death cost
-func respawn_cell() -> Vector2i:
-	if _respawn_pool.size() < 2:
-		return spawn_cell()
-
-	var picked: Vector2i = _last_respawn
-
-	while picked == _last_respawn:
-		picked = _respawn_pool[randi() % _respawn_pool.size()]
-
-	_last_respawn = picked
-	return picked
-
-
-## One runner per cube in the lobby, all of them on zero. A ghost is only drawn
-## once a position has arrived for it, so a player whose map takes longer to
-## build does not flicker into the corner of the maze first
-func _build_runners() -> void:
-	runners.clear()
-	_refresh_members()
-
-	for member in members:
-		_add_runner(member)
-
-
-func _add_runner(member: Dictionary) -> void:
-	runners[member["id"]] = {
-		"id": member["id"],
-		"name": member["name"],
-		"deaths": 0,
-		"items": 0,
-		"has_key": false,
-		"finished": false,
-		"time": 0.0,
-		"dead": false,
-		"placed": false,
-		"position": Vector3.ZERO,
-		"target": Vector3.ZERO,
-		"yaw": 0.0,
-		"target_yaw": 0.0,
-		"item": "",
-		"saws": [],
-		"saws_at": 0.0,
-		"seen_at": _now(),
-	}
-
-
-## Where this cube is, sent to everybody else. The player is looked up rather
-## than handed in, so a map that is between two rebuilds simply sends nothing
+## Where this cube is, sent to everybody else. The router keeps the local runner
+## current every frame, so this only has to read it — and a map that is between
+## two rebuilds has no cube to read, which is when nothing goes out
 func _send_local_state() -> void:
-	var player := get_tree().get_first_node_in_group("player") as Node3D
-	if player == null:
+	var me: Dictionary = Match.runners().get(steam.id, {})
+	if me.is_empty() or not bool(me["placed"]):
 		return
 
-	var death := get_tree().get_first_node_in_group("player_death") as PlayerDeath
-	var dead := death != null and death.is_dead
-	var yaw := 0.0
+	_broadcast([MSG_STATE, me["position"], me["yaw"], me["dead"]], false)
+	_send_bot_state()
 
-	var mesh := player.get_node_or_null("mesh") as Node3D
-	if mesh != null:
-		yaw = mesh.global_rotation.y
 
-	_remember_local({"position": player.global_position, "yaw": yaw, "dead": dead})
-	_broadcast([MSG_STATE, player.global_position, yaw, dead], false)
+## The host's own CPUs, sent alongside its cube. Nobody else runs them, so if
+## this stops they stand still on every other screen in the race
+func _send_bot_state() -> void:
+	if not is_host:
+		return
+
+	for account in Match.local_accounts():
+		var bot: Dictionary = Match.runners().get(account, {})
+		if bot.is_empty() or not bool(bot["placed"]) or not Bots.is_bot_account(account):
+			continue
+
+		_broadcast([MSG_BOT, account, bot["position"], bot["yaw"], bot["dead"],
+			int(bot["deaths"]), int(bot["items"]), bool(bot["has_key"]),
+			bool(bot["finished"]), float(bot["time"])], false)
 
 
 ## The counters, sent whenever one of them moved and once a second regardless.
@@ -1079,7 +793,7 @@ func _send_local_state() -> void:
 ## the counter it carried is then wrong on somebody else's screen for the rest
 ## of the race with nothing left to correct it
 func _send_local_progress(delta: float) -> void:
-	var me: Dictionary = runners.get(steam.id, {})
+	var me: Dictionary = Match.runners().get(steam.id, {})
 	var progress := {
 		"deaths": GameState.deaths,
 		"items": GameState.items_collected,
@@ -1099,7 +813,7 @@ func _send_local_progress(delta: float) -> void:
 	_sent_progress = progress.duplicate()
 	_broadcast([MSG_PROGRESS, progress["deaths"], progress["items"], progress["has_key"], \
 		progress["finished"], progress["time"], progress["item"]], true)
-	standings_updated.emit()
+	Match.standings_updated.emit()
 
 
 ## Where the blades around this cube are, by their place in the spawn order.
@@ -1110,7 +824,7 @@ func _send_local_progress(delta: float) -> void:
 ## two hundred positions on a gigantic map; the ones out of sight are the ones
 ## nobody watching this cube could see anyway
 func _send_local_saws() -> void:
-	var player := get_tree().get_first_node_in_group("player") as Node3D
+	var player := Player.at_seat(get_tree(), 0)
 	var spawner := get_tree().get_first_node_in_group(&"saw_spawner") as SawSpawner
 
 	if player == null or spawner == null:
@@ -1139,141 +853,50 @@ func _send_local_saws() -> void:
 	_broadcast([MSG_SAWS, payload], false)
 
 
-## Starts the wait a death costs. Called by the cube that burst, so that the
-## countdown on screen is the same one it is actually serving rather than a
-## second timer running alongside it and drifting
-func begin_penalty() -> void:
-	_back_at = _now() + mode().death_penalty_seconds
-
-
-## Seconds until this cube is back on its feet, 0 while it is already standing
-func penalty_left() -> float:
-	return maxf(_back_at - _now(), 0.0) if _back_at > 0.0 else 0.0
-
-
-## Called by the cube once it is back, so nothing keeps counting down at it
-func end_penalty() -> void:
-	_back_at = 0.0
-
-
-## Takes a tile for this cube's side, if it is not already ours. Called by the
-## paint field whenever the player steps onto a new cell
-func paint_cell(cell: Vector2i) -> void:
-	if not is_painting() or _round_ended:
-		return
-
-	var stamp := GameState.run_time
-
-	if not paint.claim(cell, team_of(steam.id), steam.id, stamp):
-		return
-
-	_my_tiles.append([cell, stamp])
+## One tile taken by our cube, held back until the next tick so that a run
+## across a room is one packet rather than a dozen
+func queue_paint(cell: Vector2i, stamp: float) -> void:
 	_pending_paint.append([cell, stamp])
-	paint_changed.emit()
 
 
-## Gives back the last few tiles this cube took, the price of dying. Only the
-## ones still standing in our colour come off — anything painted over since
-## belongs to whoever took it
-func lose_tiles(count: int) -> void:
-	if not is_painting():
-		return
-
-	var giving: Array = []
-
-	while _my_tiles.size() > 0 and giving.size() < count:
-		var last: Array = _my_tiles.pop_back()
-		if paint.release(last[0] as Vector2i, steam.id, float(last[1])):
-			giving.append(last)
-
-	if giving.is_empty():
-		return
-
-	_broadcast([MSG_UNPAINT, giving], true)
-	paint_changed.emit()
+func push_unpaint(tiles: Array) -> void:
+	_broadcast([MSG_UNPAINT, tiles], true)
 
 
-## While the cat is up, anybody on another side who comes within reach is told
-## they have been caught.
-##
-## Only players on other teams. Running through your own side at speed is how a
-## team covers ground, and a rainbow cube that took its own people out with it
-## would make the item something you hope nobody on your team picks up
-func _tick_hunt() -> void:
-	if not _cat_is_up():
-		return
-
-	var player := get_tree().get_first_node_in_group("player") as Node3D
-	if player == null:
-		return
-
-	var mine := team_of(steam.id)
-
-	for id: int in runners:
-		if id == steam.id or team_of(id) == mine:
-			continue
-
-		var runner: Dictionary = runners[id]
-		if not bool(runner["placed"]) or bool(runner["dead"]):
-			continue
-
-		if player.global_position.distance_to(runner["position"] as Vector3) <= HIT_RANGE:
-			_broadcast([MSG_HIT, id], true)
+func push_erase(cell: Vector2i) -> void:
+	_broadcast([MSG_ERASE, cell], true)
 
 
-## True while the rainbow is running on this cube. Read off the item system
-## rather than kept as a flag here, so it cannot say yes a moment after the
-## effect has already let go
-func _cat_is_up() -> bool:
-	for effect: ItemEffect in ItemSystem.active_effects:
-		if effect is RushEffect:
-			return true
+func push_status(account: int, effect: String, seconds: float) -> void:
+	_broadcast([MSG_STATUS, account, effect, seconds], true)
 
-	return false
+
+func push_hit(account: int) -> void:
+	_broadcast([MSG_HIT, account], true)
 
 
 ## Somebody caught this cube with the cat. The kill happens here, on the machine
 ## that owns the cube, rather than being asserted from the other end
 func _handle_hit(message: Array) -> void:
-	if message.size() < 2 or int(message[1]) != steam.id:
+	if message.size() < 2 or not Match.is_local(int(message[1])):
 		return
 
-	var death := get_tree().get_first_node_in_group("player_death") as PlayerDeath
-	if death != null and not death.is_dead:
-		death.kill(true)
-
-
-## Scrubs a tile bare whoever painted it, and tells the others. Unlike giving
-## back your own tiles this takes anybody's, so it carries no owner to check —
-## the roller that did it has already earned the right by getting there
-func erase_cell(cell: Vector2i) -> void:
-	if not is_painting() or not paint.claims.has(cell):
-		return
-
-	paint.claims.erase(cell)
-	_broadcast([MSG_ERASE, cell], true)
-	paint_changed.emit()
+	Match.report_hit(int(message[1]))
 
 
 func _handle_erase(message: Array) -> void:
-	if message.size() < 2 or not paint.claims.has(message[1] as Vector2i):
+	if message.size() < 2 or Match.session == null:
 		return
 
-	paint.claims.erase(message[1] as Vector2i)
-	paint_changed.emit()
-
-
-## Puts a status on somebody else's cube. Their machine decides what it means
-func send_status(account: int, effect: String, seconds: float) -> void:
-	if is_racing():
-		_broadcast([MSG_STATUS, account, effect, seconds], true)
+	if Match.session.erase(message[1] as Vector2i):
+		Match.paint_changed.emit()
 
 
 func _handle_status(message: Array) -> void:
-	if message.size() < 4 or int(message[1]) != steam.id:
+	if message.size() < 4 or not Match.is_local(int(message[1])):
 		return
 
-	Status.apply(String(message[2]), float(message[3]))
+	Match.send_status(int(message[1]), String(message[2]), float(message[3]))
 
 
 ## Sends the tiles taken since the last tick, all in one message
@@ -1283,23 +906,12 @@ func _tick_paint(delta: float) -> void:
 		return
 
 	_paint_timer = PAINT_RATE
-	_broadcast([MSG_PAINT, team_of(steam.id), _pending_paint.duplicate()], true)
+	_broadcast([MSG_PAINT, Match.team_of(steam.id), _pending_paint.duplicate()], true)
 	_pending_paint.clear()
 
 
-## Ends the round when the clock runs out. Every machine has its own copy of the
-## same clock, started at the same moment, so nobody has to be told
-func _tick_round() -> void:
-	if _round_ended or round_left() > 0.0:
-		return
-
-	_round_ended = true
-	GameState.is_running = false
-	round_over.emit()
-
-
 func _handle_paint(runner: Dictionary, message: Array) -> void:
-	if message.size() < 3 or not (message[2] is Array):
+	if message.size() < 3 or not (message[2] is Array) or Match.session == null:
 		return
 
 	var team := int(message[1])
@@ -1308,15 +920,15 @@ func _handle_paint(runner: Dictionary, message: Array) -> void:
 	for entry: Variant in message[2] as Array:
 		if entry is Array and (entry as Array).size() >= 2:
 			var pair := entry as Array
-			changed = paint.claim(pair[0] as Vector2i, team, int(runner["id"]), \
+			changed = Match.session.claim_for(pair[0] as Vector2i, team, int(runner["id"]), \
 				float(pair[1])) or changed
 
 	if changed:
-		paint_changed.emit()
+		Match.paint_changed.emit()
 
 
 func _handle_unpaint(runner: Dictionary, message: Array) -> void:
-	if message.size() < 2 or not (message[1] is Array):
+	if message.size() < 2 or not (message[1] is Array) or Match.session == null:
 		return
 
 	var changed := false
@@ -1324,11 +936,11 @@ func _handle_unpaint(runner: Dictionary, message: Array) -> void:
 	for entry: Variant in message[1] as Array:
 		if entry is Array and (entry as Array).size() >= 2:
 			var pair := entry as Array
-			changed = paint.release(pair[0] as Vector2i, int(runner["id"]), \
+			changed = Match.session.release_for(pair[0] as Vector2i, int(runner["id"]), \
 				float(pair[1])) or changed
 
 	if changed:
-		paint_changed.emit()
+		Match.paint_changed.emit()
 
 
 ## What this cube is carrying, by name, empty for an open hand. It goes out with
@@ -1342,14 +954,8 @@ func _held_item() -> String:
 ## Writes something into this machine's own runner. The local cube is not drawn
 ## as a ghost, but it is ranked alongside every other one
 func _remember_local(values: Dictionary) -> void:
-	var runner: Dictionary = runners.get(steam.id, {})
-	if runner.is_empty():
-		return
-
-	for key: String in values:
-		runner[key] = values[key]
-
-	runner["seen_at"] = _now()
+	if Match.session != null:
+		Match.session.remember(steam.id, values)
 
 
 ## Every message carries the account that sent it as its first value. Steam
@@ -1391,7 +997,10 @@ func _receive() -> void:
 ## race throwing away everything one player sent, and nothing would ever put it
 ## right — so a packet from somebody the lobby knows is reason enough
 func _is_racer(sender: int) -> bool:
-	if runners.has(sender):
+	if Match.session == null:
+		return false
+
+	if Match.session.runners.has(sender):
 		return true
 
 	if not is_racing():
@@ -1399,7 +1008,7 @@ func _is_racer(sender: int) -> bool:
 
 	for member in members:
 		if int(member["id"]) == sender:
-			_add_runner(member)
+			Match.session.add_runner(sender, String(member["name"]))
 			return true
 
 	return false
@@ -1412,7 +1021,7 @@ func _handle(sender: int, message: Array) -> void:
 	if sender == steam.id or message.is_empty() or not _is_racer(sender):
 		return
 
-	var runner: Dictionary = runners[sender]
+	var runner: Dictionary = Match.session.runners[sender]
 	runner["seen_at"] = _now()
 	_failed_links.erase(sender)
 
@@ -1433,6 +1042,42 @@ func _handle(sender: int, message: Array) -> void:
 			_handle_erase(message)
 		MSG_STATUS:
 			_handle_status(message)
+		MSG_BOT:
+			_handle_bot(sender, message)
+
+
+## One of the host's CPUs, as the host last saw it.
+##
+## The packet names the cube instead of the sender being it, so this is the one
+## handler that has to check who is talking: only the machine that owns the
+## lobby runs the bots, and a packet about one from anybody else is somebody
+## trying to drive a cube that is not theirs
+func _handle_bot(sender: int, message: Array) -> void:
+	if message.size() < 10 or lobby_id == 0 or sender != steam.lobby_owner(lobby_id):
+		return
+
+	var account := int(message[1])
+	if not Bots.is_bot_account(account) or not Match.session.runners.has(account):
+		return
+
+	var bot: Dictionary = Match.session.runners[account]
+	bot["target"] = message[2] as Vector3
+	bot["target_yaw"] = float(message[3])
+	bot["dead"] = bool(message[4])
+	bot["deaths"] = int(message[5])
+	bot["items"] = int(message[6])
+	bot["has_key"] = bool(message[7])
+	bot["seen_at"] = _now()
+
+	if not bool(bot["placed"]):
+		bot["placed"] = true
+		bot["position"] = bot["target"]
+		bot["yaw"] = bot["target_yaw"]
+
+	if bool(message[8]) and not bool(bot["finished"]):
+		bot["finished"] = true
+		bot["time"] = float(message[9])
+		bot["has_key"] = true
 
 
 ## Keeps the blade positions of every cube, so that whoever is watched can have
@@ -1482,16 +1127,20 @@ func _handle_progress(runner: Dictionary, message: Array) -> void:
 		runner["has_key"] = true
 		runner["dead"] = false
 
-	standings_updated.emit()
+	Match.standings_updated.emit()
 
 
 ## A cube that has said nothing for a while is off the map. Its ranking stays,
 ## only the ghost goes: a player who alt tabbed into a crash should not keep
 ## sliding along the last corridor they were seen in
 func _drop_stale_ghosts() -> void:
+	var runners := Match.runners()
 	var now := _now()
 
 	for id: int in runners:
+		if id == steam.id:
+			continue
+
 		var runner: Dictionary = runners[id]
 		if bool(runner["placed"]) and now - float(runner["seen_at"]) > GHOST_TIMEOUT:
 			runner["placed"] = false
@@ -1515,7 +1164,7 @@ func _on_run_finished() -> void:
 	})
 
 	_progress_timer = 0.0
-	standings_updated.emit()
+	Match.standings_updated.emit()
 
 
 func _reset() -> void:
@@ -1523,20 +1172,11 @@ func _reset() -> void:
 	lobby_id = 0
 	is_host = false
 	race_seed = 0
-	_level = null
 	_acted_round = 0
 	members.clear()
-	runners.clear()
+	Match.stop()
 	_sent_progress.clear()
-	paint.clear()
-	teams.clear()
-	team_colors.clear()
-	spawns.clear()
-	_respawn_pool.clear()
-	_last_respawn = Vector2i(-1, -1)
-	_my_tiles.clear()
 	_pending_paint.clear()
-	_round_ended = false
 	_sent = 0
 	_received = 0
 	_hello_timer = 0.0

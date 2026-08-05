@@ -54,6 +54,9 @@ var spawn_points: Array[Vector2i] = []
 ## The currently spawned elevator instance, if any
 var current_elevator_instance: Node3D = null
 
+## Every cabin in the level, one per seat in a race everybody reads as their own
+var spawned_elevators: Array[Node3D] = []
+
 ## The wall cell the elevator replaced, only valid after spawn_elevator()
 var current_elevator_cell: Vector2i = Vector2i.ZERO
 
@@ -107,20 +110,57 @@ func spawn_elevator() -> void:
 		push_warning("ElevatorSpawner: no elevator scene assigned, nothing to spawn")
 		return
 
-	if current_elevator_instance != null and is_instance_valid(current_elevator_instance):
-		current_elevator_instance.queue_free()
+	for existing in spawned_elevators:
+		if is_instance_valid(existing):
+			existing.queue_free()
+
+	spawned_elevators.clear()
 
 	var chosen := _pick_cell()
 	current_elevator_cell = chosen
 	_clear_wall(chosen)
 
-	current_elevator_instance = elevator_scene.instantiate()
-	holder.add_child(current_elevator_instance)
-	current_elevator_instance.global_position = _cell_to_world(chosen)
-	current_elevator_instance.global_rotation.y = _facing_angle(chosen)
+	for at in range(_sets()):
+		spawned_elevators.append(_build_one(chosen))
 
-	if current_elevator_instance is Elevator:
-		current_elevator_instance.set_grid_cell(map_generator.grid_map, chosen)
+	current_elevator_instance = spawned_elevators[0]
+	_hand_out()
+
+
+## One cabin in that cell. Nothing is rolled in here, so a second set for another
+## seat stands exactly where the first one does
+func _build_one(cell: Vector2i) -> Node3D:
+	var made: Node3D = elevator_scene.instantiate()
+	holder.add_child(made)
+	made.global_position = _cell_to_world(cell)
+	made.global_rotation.y = _facing_angle(cell)
+
+	if made is Elevator:
+		(made as Elevator).set_grid_cell(map_generator.grid_map, cell)
+
+	return made
+
+
+## How many cabins the level gets. One everywhere but a local race, where every
+## cube runs its own — the bots included, so that a CPU has a door of its own to
+## stand in front of and wait for rather than walking through everybody else's
+func _sets() -> int:
+	return maxi(Match.cube_count(), 1) if Match.is_private_race() else 1
+
+
+## Hands each cabin to its seat once they all stand. A race read as your own is
+## one lift per player: the one that flies out through the roof with you is
+## yours, and the three still waiting downstairs belong to the others
+func _hand_out() -> void:
+	if not Match.is_private_race():
+		return
+
+	var players := Player.all(get_tree())
+
+	for at in range(spawned_elevators.size()):
+		var lift := spawned_elevators[at] as Elevator
+		if lift != null:
+			lift.claim(at, players)
 
 
 ## Any of the stored candidates, they all keep the minimum distances

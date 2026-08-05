@@ -49,11 +49,11 @@ var previous_material: Material = null
 
 
 func _start() -> void:
-	movement = get_tree().get_first_node_in_group("player_movement") as PlayerMovement
+	movement = player.movement if player != null else null
 	if movement != null:
 		movement.set_boost(&"rush", speed_multiplier)
 
-	death = get_tree().get_first_node_in_group("player_death") as PlayerDeath
+	death = player.death if player != null else null
 	if death != null:
 		death.set_guard(&"rush")
 

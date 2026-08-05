@@ -25,6 +25,9 @@ func _start() -> void:
 		if wall == null or wall.is_open:
 			continue
 
+		if wall.seat >= 0 and wall.seat != seat:
+			continue
+
 		wall.open()
 		lowered.append(wall)
 

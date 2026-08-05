@@ -11,6 +11,14 @@ const PATH_SHADER := "res://Assets/shaders/SawPath.gdshader"
 ## Corners per tube ring, six already reads as round at debug thickness
 const PATH_TUBE_SIDES := 6
 
+## Which seat this blade belongs to, -1 while it is everybody's.
+##
+## A local race sets one set of blades per player into the same corridors. They
+## run the identical routes, so the maze plays the same for all of them — but
+## the freeze that stops them, the route the map item draws on them and the
+## shield that breaks one are then that player's own and nobody else's
+var seat: int = -1
+
 ## The Area3D that actually gets moved along the patrol route
 @export var parent: Area3D
 

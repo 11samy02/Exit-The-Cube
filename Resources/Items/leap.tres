@@ -1,13 +1,14 @@
-[gd_resource type="Resource" script_class="ItemData" format=3]
+[gd_resource type="Resource" script_class="ItemData" format=3 uid="uid://ckqeklrciq37p"]
 
-[ext_resource type="Script" path="res://Scripts/Items/item_data.gd" id="1_data"]
+[ext_resource type="Script" uid="uid://bsnatoh5lqagf" path="res://Scripts/Items/item_data.gd" id="1_data"]
+[ext_resource type="Texture2D" uid="uid://cukky068fsd30" path="res://Assets/Ui/jump.svg" id="2_0vphc"]
 [ext_resource type="PackedScene" path="res://Scenes/Items/leap_effect.tscn" id="3_effect"]
 
 [resource]
 script = ExtResource("1_data")
 display_name = "Sprung"
+icon = ExtResource("2_0vphc")
 duration = 0.6
 accent_color = Color(0.5, 1, 0.55, 1)
 effect_scene = ExtResource("3_effect")
-weight = 1.0
 max_in_a_row = 1

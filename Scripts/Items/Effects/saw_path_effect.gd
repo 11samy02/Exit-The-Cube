@@ -21,6 +21,7 @@ var revealed: Array[SawMover] = []
 
 
 func _start() -> void:
+	show_vignette(0.5)
 	_update_routes()
 
 
@@ -47,7 +48,7 @@ func _update_routes() -> void:
 
 	for node in get_tree().get_nodes_in_group("saw_mover"):
 		var mover := node as SawMover
-		if mover == null:
+		if mover == null or (mover.seat >= 0 and mover.seat != seat):
 			continue
 
 		var mine := revealed.has(mover)

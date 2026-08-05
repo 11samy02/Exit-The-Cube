@@ -20,6 +20,8 @@ const SPLASH_MODES := ["Off", "Low", "Medium", "High"]
 
 const COMMENTARY_MODES := ["Off", "Low", "Medium", "Lots"]
 
+const SPLIT_LAYOUTS := ["Stacked (top and bottom)", "Side by side (left and right)"]
+
 const DEFAULT_DESCRIPTION := "Display decides where the window sits. Quality decides how hard your graphics card has to work for it."
 
 var _monitor: OptionButton
@@ -38,6 +40,7 @@ var _splash: OptionButton
 var _ui_scale: HSlider
 var _ui_scale_readout: Label
 var _commentary: OptionButton
+var _split_layout: OptionButton
 
 var _resolutions: Array[Vector2i] = []
 var _frame_rates: Array[int] = []
@@ -115,6 +118,13 @@ func _build() -> void:
 	_splash = OptionsUi.make_dropdown(SPLASH_MODES, Settings.splash_quality)
 	_splash.item_selected.connect(_on_splash_selected)
 	add_child(OptionsUi.make_row("Death Splatter", _splash, _describe_splash))
+
+	add_child(OptionsUi.make_separator())
+	add_child(OptionsUi.make_heading("SPLIT SCREEN"))
+
+	_split_layout = OptionsUi.make_dropdown(SPLIT_LAYOUTS, Settings.split_layout)
+	_split_layout.item_selected.connect(_on_split_layout_selected)
+	add_child(OptionsUi.make_row("Two Player Split", _split_layout, _describe_split_layout))
 
 	add_child(OptionsUi.make_separator())
 	add_child(OptionsUi.make_heading("INTERFACE"))
@@ -303,6 +313,20 @@ func _describe_taa() -> String:
 		return "On: blends the last few frames together. Beautifully calm standing still, a bit smeary when the cube sprints."
 
 	return "Off: sharper image, more shimmer on thin edges. Switch it on if the saw blades sparkle at you."
+
+
+## Only two players have a choice worth offering. Three and four are quadrants
+## either way, and one is the whole window
+func _on_split_layout_selected(at: int) -> void:
+	Settings.set_split_layout(at)
+
+
+func _describe_split_layout(index: int) -> String:
+	match (Settings.split_layout if index < 0 else index):
+		Settings.SPLIT_STACKED:
+			return "Stacked: two wide strips, one over the other. A corridor is read by looking down it, and a full width strip keeps more of that. Three and four players are always quarters."
+
+	return "Side by side: two tall strips. More corridor above and below you, less of it ahead. Three and four players are always quarters."
 
 
 func _describe_spawn_animation() -> String:

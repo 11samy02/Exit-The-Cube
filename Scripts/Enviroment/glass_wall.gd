@@ -1,6 +1,15 @@
 extends AnimatableBody3D
 class_name GlassWall
 
+## Which seat this pane belongs to, -1 while it is everybody's.
+##
+## In a local race the maze is shared but the item that drops the panes must not
+## be: one player spending it would open the wall for the three running against
+## them. So a race sets one pane per seat into the same cell, and each of them
+## only exists for its own player — nobody else sees it, walks into it, or is
+## carried up by it
+var seat: int = -1
+
 ## A pane set into a straight run of wall. It is wall like any other until the
 ## opener drops it into the floor, and it comes back up on its own once the item
 ## runs out. Standing in its cell when it comes back means riding it up, which
@@ -95,6 +104,28 @@ var _ceiling_y: float = INF
 
 ## How tall the thing riding the pane is, taken off its own collision box
 var _rider_height: float = 1.2
+
+
+## Hands this pane to one seat: drawn on that seat's layer only, and solid to
+## that player alone. Every other cube walks straight through where it stands
+func claim(owner_seat: int, players: Array[Player]) -> void:
+	seat = owner_seat
+	SeatView.mark(self, SeatView.private_bit(owner_seat))
+
+	for cube in players:
+		if cube.seat != owner_seat:
+			add_collision_exception_with(cube)
+
+
+## Everybody this pane is allowed to carry or crush. Its own player in a race,
+## the whole room everywhere else
+func _mine() -> Array[Player]:
+	var players := Player.all(get_tree())
+
+	if seat < 0:
+		return players
+
+	return players.filter(func(cube: Player) -> bool: return cube.seat == seat)
 
 
 ## Called by the spawner once the pane stands in its cell. It builds itself off
@@ -218,32 +249,31 @@ func _physics_process(delta: float) -> void:
 	if lift <= 0.0:
 		return
 
-	var rider := _rider()
-	if rider != null:
+	for rider in _riders():
 		rider.global_position.y += lift
 
 	_crush_if_no_room()
 
 
-## The player, but only while it is standing on top of this pane. Anything
-## further off the middle of the cell than the footprint is on its way off and
-## is left behind, which is what makes stepping off the pane possible
-func _rider() -> CharacterBody3D:
-	var player := get_tree().get_first_node_in_group("player") as CharacterBody3D
-	if player == null:
-		return null
-
+## Every cube standing on top of this pane. Anything further off the middle of
+## the cell than the footprint is on its way off and is left behind, which is
+## what makes stepping off the pane possible
+func _riders() -> Array[Player]:
+	var riding: Array[Player] = []
 	var here := global_position
-	var there := player.global_position
 	var reach := maxf(_box.size.x, _box.size.z) * 0.5 * ride_footprint
-
-	if absf(there.x - here.x) > reach or absf(there.z - here.z) > reach:
-		return null
-
 	var top := here.y + _box.size.y * 0.5
-	var feet := there.y - _rider_height * 0.5
 
-	return player if feet >= top - ride_tolerance and feet <= top + ride_tolerance else null
+	for player in _mine():
+		var there := player.global_position
+		if absf(there.x - here.x) > reach or absf(there.z - here.z) > reach:
+			continue
+
+		var feet := there.y - _rider_height * 0.5
+		if feet >= top - ride_tolerance and feet <= top + ride_tolerance:
+			riding.append(player)
+
+	return riding
 
 
 ## A pane coming up under a roof block runs out of room, and whatever is in the
@@ -256,34 +286,35 @@ func _crush_if_no_room() -> void:
 	if _ceiling_y - top >= crush_clearance:
 		return
 
-	if _squeezed() == null:
+	var caught := _squeezed()
+	if caught.is_empty():
 		return
 
 	crushed.emit()
 
-	var death := get_tree().get_first_node_in_group("player_death") as PlayerDeath
-	if death != null:
-		death.kill()
+	for player in caught:
+		player.death.kill()
 
 
-## The player, but only while it is in the gap this pane is closing up. Riding
-## the pane is not part of it: a cube the pane shoved up ahead of itself instead
-## of carrying is in exactly the same gap, and the ceiling does not care which
-## of the two put it there
-func _squeezed() -> CharacterBody3D:
-	var player := get_tree().get_first_node_in_group("player") as CharacterBody3D
-	if player == null:
-		return null
-
+## Every cube in the gap this pane is closing up. Riding the pane is not part of
+## it: a cube the pane shoved up ahead of itself instead of carrying is in
+## exactly the same gap, and the ceiling does not care which of the two put it
+## there
+func _squeezed() -> Array[Player]:
+	var caught: Array[Player] = []
 	var here := global_position
-	var there := player.global_position
 	var reach := maxf(_box.size.x, _box.size.z) * 0.5
-
-	if absf(there.x - here.x) > reach or absf(there.z - here.z) > reach:
-		return null
-
 	var top := here.y + _box.size.y * 0.5
-	var feet := there.y - _rider_height * 0.5
-	var head := there.y + _rider_height * 0.5
 
-	return player if head > top and feet < _ceiling_y else null
+	for player in _mine():
+		var there := player.global_position
+		if absf(there.x - here.x) > reach or absf(there.z - here.z) > reach:
+			continue
+
+		var feet := there.y - _rider_height * 0.5
+		var head := there.y + _rider_height * 0.5
+
+		if head > top and feet < _ceiling_y:
+			caught.append(player)
+
+	return caught

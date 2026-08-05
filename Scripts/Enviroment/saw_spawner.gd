@@ -69,6 +69,11 @@ var rng := RandomNumberGenerator.new()
 
 var spawned_saws: Array[Node3D] = []
 
+## The routes that were rolled for this map, one entry per blade. A local race
+## builds every one of them once per player, and rolling a second time would
+## hand the second player a different maze
+var _blueprints: Array[Dictionary] = []
+
 ## Grid cells taken by a route including its buffer, used as a set
 var reserved_cells: Dictionary = {}
 
@@ -94,26 +99,59 @@ func spawn_saws() -> void:
 
 		_reserve_route(path)
 
-		var saw: Node3D = saw_scene.instantiate()
-		holder.add_child(saw)
-
 		var world_points: Array[Vector3] = []
 		for cell in path:
 			world_points.append(_cell_to_world(cell))
 
-		var mover: SawMover = _find_saw_mover(saw)
-		if mover == null:
-			push_error("SawSpawner: no SawMover found in saw scene!")
-			saw.queue_free()
-			continue
+		_blueprints.append({
+			"points": world_points,
+			"behavior": _pick_behavior(path),
+			"speed": rng.randf_range(min_speed, max_speed),
+		})
 
-		mover.behavior = _pick_behavior(path)
-		mover.speed = rng.randf_range(min_speed, max_speed)
-		mover.set_waypoints(world_points)
-
-		spawned_saws.append(saw)
+	for at in range(_sets()):
+		for plan: Dictionary in _blueprints:
+			_build_saw(plan, at)
 
 	_spawn_ai_saws()
+
+
+## How many sets of blades the level gets. One everywhere but a local race,
+## where every player runs their own — the routes are identical, so the maze is
+## the same maze; what differs is whose item may touch which set
+func _sets() -> int:
+	return maxi(Seats.count(), 1) if Match.is_private_race() else 1
+
+
+## One blade off a recorded plan. Nothing is rolled in here, so the second set
+## walks exactly the corridors the first one does
+func _build_saw(plan: Dictionary, seat: int) -> void:
+	var saw: Node3D = saw_scene.instantiate()
+	holder.add_child(saw)
+
+	var mover: SawMover = _find_saw_mover(saw)
+	if mover == null:
+		push_error("SawSpawner: no SawMover found in saw scene!")
+		saw.queue_free()
+		return
+
+	mover.behavior = int(plan["behavior"])
+	mover.speed = float(plan["speed"])
+	mover.set_waypoints(plan["points"])
+	_hand_to_seat(saw, mover, seat)
+
+	spawned_saws.append(saw)
+
+
+## Ties a blade to one player: drawn on their layer, and deaf to every other
+## cube. A saw is an area rather than a body, so being ignored is something the
+## blade decides when somebody walks into it and not the physics server
+func _hand_to_seat(saw: Node3D, mover: SawMover, seat: int) -> void:
+	if not Match.is_private_race():
+		return
+
+	mover.seat = seat
+	SeatView.mark(saw, SeatView.private_bit(seat))
 
 
 ## The steered saws go in after the patrolling ones and reserve nothing. They do
@@ -131,34 +169,51 @@ func _spawn_ai_saws() -> void:
 		push_warning("SawSpawner: no free cell left to put a steered saw in")
 		return
 
+	var plans: Array[Dictionary] = []
+
 	for i in range(ai_saw_count):
 		if free_cells.is_empty():
 			free_cells = _ai_start_cells()
 
-		var saw: Node3D = ai_saw_scene.instantiate()
-		holder.add_child(saw)
-
-		var brain: SawAi = _find_saw_ai(saw)
-		if brain == null:
-			push_error("SawSpawner: no SawAi found in the steered saw scene!")
-			saw.queue_free()
-			return
-
-		brain.mind = _roll_mind(i)
-
-		brain.key_spawner = key_spawner
-		brain.elevator_spawner = elevator_spawner
-
-		var mover: SawMover = _find_saw_mover(saw)
-		if mover != null:
-			mover.speed = rng.randf_range(min_speed, max_speed)
-
 		var at := rng.randi_range(0, free_cells.size() - 1)
-		var start: Vector2i = free_cells[at]
+
+		plans.append({
+			"mind": _roll_mind(i),
+			"speed": rng.randf_range(min_speed, max_speed),
+			"start": free_cells[at],
+			"seed": rng.randi(),
+		})
+
 		free_cells.remove_at(at)
 
-		brain.setup(map_generator, start, rng.randi())
-		spawned_saws.append(saw)
+	for seat in range(_sets()):
+		for plan in plans:
+			_build_ai_saw(plan, seat)
+
+
+## One steered blade off a recorded plan, so every player's set thinks the same
+## thoughts from the same corner
+func _build_ai_saw(plan: Dictionary, seat: int) -> void:
+	var saw: Node3D = ai_saw_scene.instantiate()
+	holder.add_child(saw)
+
+	var brain: SawAi = _find_saw_ai(saw)
+	if brain == null:
+		push_error("SawSpawner: no SawAi found in the steered saw scene!")
+		saw.queue_free()
+		return
+
+	brain.mind = int(plan["mind"])
+	brain.key_spawner = key_spawner
+	brain.elevator_spawner = elevator_spawner
+
+	var mover: SawMover = _find_saw_mover(saw)
+	if mover != null:
+		mover.speed = float(plan["speed"])
+		_hand_to_seat(saw, mover, seat)
+
+	brain.setup(map_generator, plan["start"] as Vector2i, int(plan["seed"]))
+	spawned_saws.append(saw)
 
 
 ## Where a steered saw may be dropped in: a free corridor cell a real walk away
@@ -280,6 +335,7 @@ func _clear_saws() -> void:
 		if is_instance_valid(saw):
 			saw.queue_free()
 	spawned_saws.clear()
+	_blueprints.clear()
 	reserved_cells.clear()
 	blocked_cells.clear()
 

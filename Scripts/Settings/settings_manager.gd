@@ -7,6 +7,10 @@ signal display_changed
 ## Emitted whenever a binding was taken, dropped or reset to default
 signal bindings_changed
 
+## Emitted when the two player split was flipped between stacked and side by
+## side, the rig relays its viewports on it
+signal split_layout_changed
+
 ## Emitted after a bus volume moved, the sliders read the value back from here
 signal audio_changed
 
@@ -30,6 +34,12 @@ const MODE_BORDERLESS := 2
 ## button on the same action without them overwriting each other
 const SLOT_KEYBOARD := 0
 const SLOT_GAMEPAD := 1
+
+## How two cubes share one window. Stacked is the default on purpose: a corridor
+## is read by looking down it, and a full width strip keeps more of that than a
+## tall narrow one does
+const SPLIT_STACKED := 0
+const SPLIT_SIDE_BY_SIDE := 1
 
 ## How much of the paint a death leaves on the map is drawn, in the order the
 ## dropdown lists them
@@ -152,6 +162,13 @@ var spawn_animation: bool = true
 ## the full show
 var splash_quality: int = SPLASH_MEDIUM
 
+## How two cubes share the window
+var split_layout: int = SPLIT_STACKED
+
+## Viewports besides the window itself that the quality settings have to reach.
+## A split screen rig puts its own in here while it is up
+var _extra_viewports: Array[Viewport] = []
+
 ## How many subtitles the game throws at the player while a level runs
 var commentary: int = COMMENTARY_HIGH
 
@@ -195,11 +212,17 @@ func _exit_tree() -> void:
 		save()
 
 
-## Every action that is not one of Godot's own ui_ actions can be rebound
+## Every action the options may rebind.
+##
+## The per seat copies are left out on purpose. They are built off these actions
+## rather than being bindings of their own, and a conflict check that could see
+## them would take the event straight back off the action it was just copied
+## from — one rebind on a split screen and the controls are gone
 func get_remappable_actions() -> Array[StringName]:
 	var actions: Array[StringName] = []
 	for action in InputMap.get_actions():
-		if not String(action).begins_with("ui_"):
+		var name := String(action)
+		if not name.begins_with("ui_") and not name.begins_with(SeatTable.PREFIX):
 			actions.append(action)
 
 	return actions
@@ -464,13 +487,53 @@ func apply_audio() -> void:
 ## cannot be combined with a render scale below 100 %, the two ask the renderer
 ## for framebuffers that do not fit together and the world stops being drawn
 func apply_graphics() -> void:
-	var root := get_tree().root
-	root.msaa_2d = Viewport.MSAA_DISABLED
-	root.msaa_3d = msaa as Viewport.MSAA
-	root.screen_space_aa = screen_space_aa as Viewport.ScreenSpaceAA
-	root.use_taa = taa
-	root.scaling_3d_mode = upscaler as Viewport.Scaling3DMode
-	root.scaling_3d_scale = clampf(render_scale, MIN_RENDER_SCALE, MAX_RENDER_SCALE)
+	for viewport in _quality_viewports():
+		_apply_quality(viewport)
+
+	_request_save()
+
+
+## Every viewport the picture is drawn into. A split screen renders the world in
+## its own viewports, and each of them keeps a private copy of the anti aliasing
+## and the render scale — a setting written onto the window alone simply would
+## not reach them
+func _quality_viewports() -> Array[Viewport]:
+	var found: Array[Viewport] = [get_tree().root]
+
+	for viewport in _extra_viewports:
+		if is_instance_valid(viewport):
+			found.append(viewport)
+
+	return found
+
+
+func _apply_quality(viewport: Viewport) -> void:
+	viewport.msaa_2d = Viewport.MSAA_DISABLED
+	viewport.msaa_3d = msaa as Viewport.MSAA
+	viewport.screen_space_aa = screen_space_aa as Viewport.ScreenSpaceAA
+	viewport.use_taa = taa
+	viewport.scaling_3d_mode = upscaler as Viewport.Scaling3DMode
+	viewport.scaling_3d_scale = clampf(render_scale, MIN_RENDER_SCALE, MAX_RENDER_SCALE)
+
+
+## Takes a split screen viewport on board, so the quality options reach it as
+## well. It gets the current settings straight away rather than waiting for the
+## player to move one
+func register_viewport(viewport: Viewport) -> void:
+	if viewport == null or _extra_viewports.has(viewport):
+		return
+
+	_extra_viewports.append(viewport)
+	_apply_quality(viewport)
+
+
+func unregister_viewport(viewport: Viewport) -> void:
+	_extra_viewports.erase(viewport)
+
+
+func set_split_layout(value: int) -> void:
+	split_layout = clampi(value, SPLIT_STACKED, SPLIT_SIDE_BY_SIDE)
+	split_layout_changed.emit()
 	_request_save()
 
 
@@ -556,6 +619,7 @@ func save() -> void:
 	config.set_value("graphics", "ui_scale", ui_scale)
 	config.set_value("graphics", "spawn_animation", spawn_animation)
 	config.set_value("graphics", "splash_quality", splash_quality)
+	config.set_value("graphics", "split_layout", split_layout)
 	config.set_value("game", "commentary", commentary)
 	config.set_value("audio", "buses", bus_volumes)
 	config.set_value("input", "bindings", _bindings)
@@ -601,6 +665,7 @@ func _load() -> void:
 	ui_scale = clampf(float(config.get_value("graphics", "ui_scale", ui_scale)), MIN_UI_SCALE, MAX_UI_SCALE)
 	spawn_animation = bool(config.get_value("graphics", "spawn_animation", spawn_animation))
 	splash_quality = clampi(int(config.get_value("graphics", "splash_quality", splash_quality)), SPLASH_OFF, SPLASH_HIGH)
+	split_layout = clampi(int(config.get_value("graphics", "split_layout", split_layout)), SPLIT_STACKED, SPLIT_SIDE_BY_SIDE)
 	commentary = clampi(int(config.get_value("game", "commentary", commentary)), COMMENTARY_OFF, COMMENTARY_HIGH)
 	bus_volumes = config.get_value("audio", "buses", {})
 	_bindings = config.get_value("input", "bindings", {})

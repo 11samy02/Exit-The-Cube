@@ -34,9 +34,14 @@ func _on_body_entered(body: Node3D) -> void:
 	if not body.is_in_group("player"):
 		return
 
-	var death := get_tree().get_first_node_in_group("player_death") as PlayerDeath
-	if death == null:
+	var cube := Player.of(body)
+	if cube == null:
 		return
+
+	if mover != null and mover.seat >= 0 and mover.seat != _set_for(cube):
+		return
+
+	var death := cube.death
 
 	if death.breaks_saws:
 		_shatter(body, death)
@@ -50,6 +55,16 @@ func _on_body_entered(body: Node3D) -> void:
 	death.kill()
 
 
+## Which set of blades that cube is judged against.
+##
+## A ghost has no set of its own — the blades are handed out one per seat and a
+## bot holds none of them — so it runs the first player's. Without this every
+## blade in a race waved a CPU straight through, which is why they were coming
+## out of the maze in seventeen seconds without a scratch
+func _set_for(cube: Player) -> int:
+	return 0 if cube.is_ghosted() else cube.seat
+
+
 ## The blade loses. It is taken out of the level for the rest of the attempt and
 ## the cube leaves its own color on the spot, so the wreck is still marked on
 ## the next run past it
@@ -61,7 +76,7 @@ func _shatter(cube: Node3D, death: PlayerDeath) -> void:
 	_explode(saw)
 	death.break_saw(cube.global_position.lerp(saw.global_position, 0.5))
 
-	var revive := Online.saw_revive_seconds()
+	var revive := Match.saw_revive_seconds()
 	if revive <= 0.0:
 		saw.queue_free()
 		return

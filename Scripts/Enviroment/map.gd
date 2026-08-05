@@ -24,15 +24,15 @@ extends GridMap
 
 
 ## The campaign decides which level is built, the resource on this node is only
-## what the scene falls back to when it is opened on its own. An online race
-## brings its own level along and comes first, it is the one thing that is not
-## picked out of a list but generated from the seed the whole lobby shares.
+## what the scene falls back to when it is opened on its own. A round with rules
+## of its own brings its level along and comes first, it is the one thing that is
+## not picked out of a list but generated from the seed everybody shares.
 ##
 ## The UI reads the run state in its own _ready, and a child is ready before its
 ## parent. Handing the level over here instead of in _ready keeps the UI from
 ## showing the key of the attempt before across a scene reload.
 func _enter_tree() -> void:
-	var level := Online.level() if Online.is_racing() else Levels.current()
+	var level := Match.level() if Match.is_racing() else Levels.current()
 	if level != null:
 		map_data = level
 
@@ -58,19 +58,15 @@ func _ready() -> void:
 
 	if player_spawner != null:
 		player_spawner.generate_spawn_points()
-		Online.spawn_cells_from(map_generator.get_path_cells(), map_generator.width)
+		Match.spawn_cells_from(map_generator.get_path_cells(), map_generator.width)
 
-		var mine := Online.spawn_cell()
-		if mine.x >= 0:
-			player_spawner.spawn_points = [mine]
-
-		player_spawner.spawn_player()
+		player_spawner.spawn_seats(Match.seat_cells())
 
 	var with_exit := map_data == null or map_data.with_exit
 
 	if with_exit:
 		key_spawner.generate_spawn_points()
-		key_spawner.spawn_key()
+		key_spawner.spawn_keys(Match.key_owners())
 
 		if elevator_spawner != null:
 			elevator_spawner.generate_spawn_points()
@@ -90,7 +86,7 @@ func _ready() -> void:
 	if blood_spawner != null:
 		blood_spawner.spawn_marks()
 
-	Online.attach_to_map(self)
+	Match.attach_to_map(self)
 
 
 ## Hands the level over to the spawners, one section per spawner

@@ -52,6 +52,7 @@ var _next_ring: float = 0.0
 
 
 func _start() -> void:
+	show_vignette(0.55)
 	map_generator = get_tree().get_first_node_in_group("map_generator") as MapGenerator
 	if map_generator == null:
 		push_warning("EchoEffect: no map generator in the level, the waves have no corridors to run")
@@ -93,6 +94,7 @@ func _send_ring() -> void:
 	ring.fade_distance = fade_distance
 	ring.top_level = true
 	holder.add_child(ring)
+	claim(ring)
 	ring.launch(_route, ring_speed, ring_color, ring_size, ring_glow)
 
 

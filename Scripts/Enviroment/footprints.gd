@@ -45,20 +45,25 @@ var _print_mesh := QuadMesh.new()
 ## All prints of the level in one MultiMesh, so the trail is a single draw call
 var _trail: MultiMeshInstance3D = null
 
-var _player: CharacterBody3D = null
+## What one cube is dragging around with it. Every player walks their own paint
+## through their own corridors, so none of this can be shared
+class Walker:
+	## The paint still on the underside of the cube and how many steps of it are
+	## left, an alpha of zero meaning the cube walks clean
+	var carried := Color(0, 0, 0, 0)
+	var steps_left: int = 0
 
-## The paint still on the underside of the cube and how many steps of it are
-## left, an alpha of zero meaning the cube walks clean
-var _carried := Color(0, 0, 0, 0)
-var _steps_left: int = 0
+	## Meters walked since the last print went down
+	var walked: float = 0.0
 
-## Meters walked since the last print went down
-var _walked: float = 0.0
+	## Which side the next print steps out to
+	var side: float = 1.0
 
-## Which side the next print steps out to
-var _side: float = 1.0
+	var last_position := Vector3.ZERO
 
-var _last_position := Vector3.ZERO
+
+## One walker per cube, by seat
+var _walkers: Dictionary = {}
 
 
 func _ready() -> void:
@@ -70,17 +75,37 @@ func _ready() -> void:
 ## Watched from here instead of from the cube, so nothing has to be wired into
 ## the player scene and a level without a trail simply has no trail
 func _physics_process(_delta: float) -> void:
-	if not _is_enabled() or not _find_player():
+	if not _is_enabled():
 		return
 
-	var position := _player.global_position
-	if not _player.is_on_floor():
-		_last_position = position
+	for cube in Player.all(get_tree()):
+		_step(cube, _walker_of(cube))
+
+
+func _step(cube: Player, walker: Walker) -> void:
+	var position := cube.global_position
+
+	if not cube.is_on_floor():
+		walker.last_position = position
 		return
 
-	_pick_up(position)
-	_walk(position)
-	_last_position = position
+	_pick_up(walker, position)
+	_walk(cube, walker, position)
+	walker.last_position = position
+
+
+## The walker of that cube, made on the spot the first time it is asked for. A
+## death rebuilds the body, so a fresh walker starting where it stands is right:
+## a cube that came back has nothing under it yet
+func _walker_of(cube: Player) -> Walker:
+	var held: Walker = _walkers.get(cube.seat, null)
+
+	if held == null:
+		held = Walker.new()
+		held.last_position = cube.global_position
+		_walkers[cube.seat] = held
+
+	return held
 
 
 ## Puts the prints of the attempts before this one back down, called once the
@@ -131,23 +156,24 @@ func _refill() -> void:
 ## Steps the cube took while it still had paint on it. The distance is counted
 ## instead of the animation, a print every so many meters keeps its spacing
 ## however fast the cube is going
-func _walk(position: Vector3) -> void:
-	_walked += Vector2(position.x - _last_position.x, position.z - _last_position.z).length()
+func _walk(cube: Player, walker: Walker, position: Vector3) -> void:
+	walker.walked += Vector2(position.x - walker.last_position.x,
+		position.z - walker.last_position.z).length()
 
-	while _walked >= step_distance:
-		_walked -= step_distance
+	while walker.walked >= step_distance:
+		walker.walked -= step_distance
 
-		if _steps_left <= 0:
+		if walker.steps_left <= 0:
 			continue
 
-		_stamp(position)
-		_steps_left -= 1
-		_side = -_side
+		_stamp(cube, walker, position)
+		walker.steps_left -= 1
+		walker.side = -walker.side
 
 
 ## Wet paint under the cube reloads it, walking through the same mark again
 ## fills it back up
-func _pick_up(position: Vector3) -> void:
+func _pick_up(walker: Walker, position: Vector3) -> void:
 	if blood_spawner == null:
 		return
 
@@ -155,14 +181,14 @@ func _pick_up(position: Vector3) -> void:
 	if ink.a <= 0.0:
 		return
 
-	_carried = ink
-	_steps_left = steps_per_pickup
+	walker.carried = ink
+	walker.steps_left = steps_per_pickup
 
 
 ## Lays one print on whatever the cube is standing on. The floor is asked for
 ## its height instead of the cube, which is somewhere in the middle of its hop
-func _stamp(position: Vector3) -> void:
-	var ignore: Array[RID] = [_player.get_rid()]
+func _stamp(cube: Player, walker: Walker, position: Vector3) -> void:
+	var ignore: Array[RID] = [cube.get_rid()]
 	var space := holder.get_world_3d().direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(position + Vector3.UP * 0.3, position + Vector3.DOWN * 1.6)
 	query.collide_with_areas = false
@@ -172,10 +198,10 @@ func _stamp(position: Vector3) -> void:
 	if hit.is_empty() or not (hit.collider is GridMap):
 		return
 
-	var paint := float(_steps_left) / float(maxi(steps_per_pickup, 1))
+	var paint := float(walker.steps_left) / float(maxi(steps_per_pickup, 1))
 	var entry := {
-		"transform": _print_transform(hit.position, hit.normal, position),
-		"color": Color(_carried.r, _carried.g, _carried.b, paint),
+		"transform": _print_transform(walker, hit.position, hit.normal, position),
+		"color": Color(walker.carried.r, walker.carried.g, walker.carried.b, paint),
 	}
 
 	DeathMarks.add_print(entry)
@@ -184,9 +210,10 @@ func _stamp(position: Vector3) -> void:
 
 ## The print is turned into the direction the cube is walking and set out to one
 ## side of that line, so a trail reads as steps and not as a painted stripe
-func _print_transform(point: Vector3, surface: Vector3, position: Vector3) -> Transform3D:
+func _print_transform(walker: Walker, point: Vector3, surface: Vector3, \
+		position: Vector3) -> Transform3D:
 	var normal := surface.normalized()
-	var heading := position - _last_position
+	var heading := position - walker.last_position
 	var forward := heading.slide(normal)
 	if forward.length_squared() < 0.0001:
 		forward = Vector3.FORWARD.slide(normal)
@@ -196,7 +223,7 @@ func _print_transform(point: Vector3, surface: Vector3, position: Vector3) -> Tr
 	var size := print_size * rng.randf_range(0.85, 1.15)
 	var basis := Basis(right * size, forward * size, normal)
 
-	return Transform3D(basis, point + normal * surface_offset + right * side_offset * _side)
+	return Transform3D(basis, point + normal * surface_offset + right * side_offset * walker.side)
 
 
 ## One material for the whole trail, a print carries its own color as instance
@@ -227,23 +254,6 @@ func _is_enabled() -> bool:
 func _prints_kept() -> int:
 	var quality := clampi(Settings.splash_quality, 0, BloodSpawner.QUALITY_DEATHS.size() - 1)
 	return roundi(max_prints * BloodSpawner.QUALITY_DEATHS[quality])
-
-
-## The cube is replaced on every attempt, so it is looked up again whenever the
-## one from before is gone. A fresh cube walks clean
-func _find_player() -> bool:
-	if _player != null and is_instance_valid(_player):
-		return true
-
-	_player = get_tree().get_first_node_in_group("player") as CharacterBody3D
-	if _player == null:
-		return false
-
-	_last_position = _player.global_position
-	_walked = 0.0
-	_carried = Color(0, 0, 0, 0)
-	_steps_left = 0
-	return true
 
 
 func _clear() -> void:

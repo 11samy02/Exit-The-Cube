@@ -12,7 +12,8 @@ var _used: bool = false
 
 
 func _start() -> void:
-	death = get_tree().get_first_node_in_group("player_death") as PlayerDeath
+	show_vignette(0.85)
+	death = player.death if player != null else null
 	if death == null:
 		return
 

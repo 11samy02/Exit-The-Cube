@@ -1,11 +1,11 @@
 extends ItemEffect
 class_name SplashEffect
 
-## Throws paint outwards and takes every floor tile it can see.
+## Throws paint outwards and takes the floor around the cube.
 ##
-## Line of sight rather than a plain circle: a splash that went through walls
-## would paint the corridor on the other side of one, which reads as a bug
-## whichever way it fell. What it takes is what you could have looked at
+## It goes through the walls of the maze. A splash held to what the cube could
+## see is a splash that mostly hits the corridor it is already standing in, and
+## the item is meant to be the one that takes a junction in one go
 
 ## How far the paint reaches, in cells. The one number worth balancing
 @export var radius: int = 8
@@ -14,17 +14,56 @@ class_name SplashEffect
 ## are decided at once, they are simply handed over in rings
 @export var sweep_duration: float = 0.45
 
+## Whether the paint stops at a wall. Off, the splash soaks whatever is within
+## reach of the cube, the corridor on the other side of a wall included
+@export var walled_in: bool = false
+
+@export_group("Burst")
+
+## How many rings the wave is drawn as
+@export var ring_count: int = 3
+
+## Seconds between them
+@export var ring_delay: float = 0.08
+
 var _rings: Array = []
 var _swept: float = 0.0
 
 
 func _start() -> void:
-	if not Online.is_painting():
+	if not Match.is_painting():
 		stop(false)
 		return
 
 	show_vignette(0.7)
 	_rings = _reachable_rings()
+	_throw_the_paint()
+
+
+## The wave the paint arrives on, in the colour of the side that threw it. The
+## tiles are already decided by the time this runs, this is only what it looks
+## like from the outside
+func _throw_the_paint() -> void:
+	var holder := player.get_parent()
+	if holder == null:
+		return
+
+	var color := Match.team_color(Match.team_of(player.account()))
+	var reach := float(radius) * _cell_size()
+
+	for at in range(maxi(ring_count, 1)):
+		var ring := BurstRing.burst(holder, player.global_position, color,
+			reach, sweep_duration + 0.2, false, ring_delay * at)
+		claim(ring)
+
+
+## How wide one cell of the maze is, so the burst covers the tiles it painted
+func _cell_size() -> float:
+	var generator := get_tree().get_first_node_in_group("map_generator") as MapGenerator
+	if generator == null or generator.grid_map == null:
+		return 2.0
+
+	return generator.grid_map.cell_size.x
 
 
 ## Hands the rings over in order, so the paint reads as running outwards from
@@ -38,7 +77,7 @@ func _tick(delta: float) -> void:
 
 	while not _rings.is_empty() and reached > 0:
 		for cell: Vector2i in _rings.pop_front() as Array:
-			Online.paint_cell(cell)
+			Match.paint_cell(player.account(), cell)
 
 		reached -= 1
 
@@ -69,7 +108,7 @@ func _reachable_rings() -> Array:
 
 			if away > radius or not generator.is_path_cell(cell):
 				continue
-			if not _can_see(generator, here, cell):
+			if walled_in and not _can_see(generator, here, cell):
 				continue
 
 			(rings[away] as Array).append(cell)
@@ -78,8 +117,7 @@ func _reachable_rings() -> Array:
 
 
 ## Walks the straight line between two cells and gives up at the first wall.
-## Grid stepping rather than a physics ray: the answer has to be about which
-## cells the maze has, not about what a collision shape happens to catch
+## Only read while the splash is set to stop at them
 func _can_see(generator: MapGenerator, from: Vector2i, to: Vector2i) -> bool:
 	var span := Vector2(to - from)
 	var steps := int(ceil(maxf(absf(span.x), absf(span.y))))

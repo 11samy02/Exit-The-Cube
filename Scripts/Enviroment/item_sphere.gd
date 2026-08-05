@@ -18,7 +18,23 @@ class_name ItemSphere
 ## Turns it spins while it forms
 @export var appear_spins: float = 1.5
 
+## Whose sphere this is, -1 for the one sphere a shared maze has.
+##
+## A race everybody reads as their own needs a set each: one shell in one cell
+## that the first cube through takes is a race for pickups rather than a race,
+## and the other players are left walking corridors that have already been
+## stripped. They stand in the same cells and each one is deaf and invisible to
+## everybody but its owner
+@export var owner_seat: int = -1
+
 var collected: bool = false
+
+
+func _ready() -> void:
+	if owner_seat < 0 or not Match.is_private_race():
+		return
+
+	SeatView.mark(self, SeatView.private_bit(owner_seat))
 
 
 ## Winds the sphere into the level rather than letting it blink into a corridor
@@ -53,11 +69,20 @@ func _on_body_entered(body: Node3D) -> void:
 	if collected or not body.is_in_group("player"):
 		return
 
-	if ItemSystem.grant_random_item() == null:
+	var cube := Player.of(body)
+	if cube != null and cube.is_ghosted():
+		return
+
+	if owner_seat >= 0 and (cube == null or cube.seat != owner_seat):
+		return
+
+	if ItemSystem.grant_random_item(body) == null:
 		return
 
 	collected = true
-	GameState.count_item_collected()
+
+	if cube == null or not cube.is_bot:
+		GameState.count_item_collected()
 	set_deferred("monitoring", false)
 	shards.restart()
 	sparks.restart()

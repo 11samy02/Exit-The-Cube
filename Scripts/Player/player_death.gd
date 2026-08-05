@@ -138,24 +138,56 @@ func kill(force: bool = false) -> void:
 		return
 
 	is_dead = true
+	var cube := Player.of(self)
+	var quiet := cube != null and cube.is_ghosted()
 	var survived := Time.get_ticks_msec() / 1000.0 - _spawned_at
+
 	_paint_blood()
 	mesh.visible = false
 	movement.disable()
 	chunks.restart()
 	burst.restart()
-	death_sound.play()
 	screen_shake.shake(shake_strength)
-	_flash()
 
-	if Online.is_painting():
+	if not quiet:
+		death_sound.play()
+		_flash()
+
+	if Match.serves_penalty():
 		await _sit_out()
+		return
+
+	var coop := CoopCoordinator.find(get_tree())
+	if coop != null:
+		_sit_out_together(coop, survived)
 		return
 
 	await get_tree().create_timer(reload_delay).timeout
 	GameState.add_death()
 	Quips.report_death(GameState.deaths, survived)
 	Transition.reload_scene()
+
+
+## What dying costs while the level is being played by a room.
+##
+## Nothing is awaited here. The wait belongs to the coordinator, which is the one
+## thing that can see whether this death is worth five seconds or the whole
+## level — and a timer running inside a cube that is about to be freed by the
+## rebuild would be racing the very thing it is waiting for.
+##
+## Only the first seat's death is commented on. Four cubes bursting into the same
+## saw is one event to the room and four lines of commentary would read as the
+## game shouting
+func _sit_out_together(coop: CoopCoordinator, survived: float) -> void:
+	var cube := Player.of(self)
+	var seat := cube.seat if cube != null else 0
+
+	GameState.add_death()
+
+	if seat == 0:
+		Quips.report_death(GameState.deaths, survived)
+
+	coop.report_death(seat)
 
 
 ## What dying costs in a painting round.
@@ -169,14 +201,17 @@ func kill(force: bool = false) -> void:
 ## The tiles go first so that the others see the hole appear at the moment of the
 ## death rather than five seconds later
 func _sit_out() -> void:
-	GameState.add_death()
-	Online.lose_tiles(Online.mode().death_tile_penalty)
-	Online.begin_penalty()
+	var cube := Player.of(self)
+	var account := cube.account() if cube != null else 0
 
-	var spawner := get_tree().get_first_node_in_group("player_spawn") as PlayerSpawn
+	_count_death(cube)
+	Match.lose_tiles(account, Match.mode().death_tile_penalty)
+	Match.begin_penalty(account)
+
+	var spawner := cube.spawn if cube != null else null
 	var lead := spawner.entrance_lead() if spawner != null else 0.0
 
-	await get_tree().create_timer(maxf(Online.mode().death_penalty_seconds - lead, 0.1)).timeout
+	await get_tree().create_timer(maxf(Match.death_penalty_seconds() - lead, 0.1)).timeout
 	if not is_inside_tree():
 		return
 
@@ -186,10 +221,24 @@ func _sit_out() -> void:
 		spawner.respawn()
 
 
+## Counts the death where it belongs. A bot's is the round's business and never
+## the run's: eight CPUs bursting into blades would otherwise read on the summary
+## as the player having died forty times
+func _count_death(cube: Player) -> void:
+	Match.count_death(cube.account() if cube != null else 0)
+
+	if cube == null or not cube.is_bot:
+		GameState.add_death()
+
+
 ## Leaves the cube on the walls around that point, in its own color. The map
 ## keeps the splatter over a reload, so the next attempt runs past it again.
 ## Called for the burst itself and by whatever else spills the cube open
 func splatter(origin: Vector3) -> void:
+	var cube := Player.of(self)
+	if cube != null and cube.is_ghosted():
+		return
+
 	var blood := get_tree().get_first_node_in_group("blood_spawner") as BloodSpawner
 	if blood == null:
 		return

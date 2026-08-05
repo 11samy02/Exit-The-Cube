@@ -51,14 +51,54 @@ var ring_colors: Array[Color] = []
 ## True while the slot holds an item, the prompt is only up together with it
 var _has_item: bool = false
 
+## Which cube this slot draws, -1 for the shared HUD that draws the first one.
+## A split screen binds one slot per seat and each of them shows its own pad
+var seat: int = -1
+
+## The inventory the slot reads, null while it draws the first seat through the
+## item system instead
+var _holder: PlayerInventory = null
+
+## Stands in for the effects of a cube that is not in the level right now
+var _no_effects: Array[ItemEffect] = []
+
 
 ## Plugging a pad in halfway through a run is normal and so is rebinding the
 ## key in the options, the prompt follows both instead of being decided once
 func _ready() -> void:
-	ItemSystem.item_changed.connect(_on_item_changed)
 	InputIcons.device_changed.connect(_on_device_changed)
 	Settings.bindings_changed.connect(_refresh_prompt)
-	_show_item(ItemSystem.held_item)
+
+	if seat < 0:
+		ItemSystem.item_changed.connect(_on_item_changed)
+		_show_item(ItemSystem.held_item)
+
+
+## Ties this slot to one cube's own inventory. A death rebuilds the cube, so
+## this is called again with whatever is standing there now
+func bind(holder: PlayerInventory) -> void:
+	if _holder == holder:
+		return
+
+	if _holder != null and is_instance_valid(_holder) \
+			and _holder.item_changed.is_connected(_on_item_changed):
+		_holder.item_changed.disconnect(_on_item_changed)
+
+	_holder = holder
+
+	if _holder != null:
+		_holder.item_changed.connect(_on_item_changed)
+		_show_item(_holder.held_item)
+	else:
+		_show_item(null)
+
+
+## Whatever is running on the cube this slot draws
+func _effects() -> Array[ItemEffect]:
+	if seat < 0:
+		return ItemSystem.active_effects
+
+	return _holder.active_effects if _holder != null else _no_effects
 
 
 ## The rings belong to the running effects, not to what sits in the slot. Both
@@ -69,7 +109,7 @@ func _process(_delta: float) -> void:
 	ring_progress.clear()
 	ring_colors.clear()
 
-	for effect in ItemSystem.active_effects:
+	for effect in _effects():
 		if not is_instance_valid(effect):
 			continue
 
@@ -153,8 +193,10 @@ func _on_device_changed(_device: int) -> void:
 ## rebound in the options shows up under the slot without anything else being
 ## told about it. The text is only there for bindings no icon exists for
 func _refresh_prompt() -> void:
-	var event := Settings.get_binding(USE_ACTION, InputIcons.prompt_slot())
-	var texture := InputIcons.get_event_texture(event)
+	var slot := Seats.slot_of(seat) if seat >= 0 else InputIcons.prompt_slot()
+	var event := Settings.get_binding(USE_ACTION, slot)
+	var texture := InputIcons.get_seat_action_texture(seat, USE_ACTION) if seat >= 0 \
+		else InputIcons.get_event_texture(event)
 
 	use_icon.texture = texture
 	use_icon.visible = _has_item and texture != null

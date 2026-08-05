@@ -382,8 +382,16 @@ func _objective_cell() -> Vector2i:
 	return doors[0] if not doors.is_empty() else Vector2i(-1, -1)
 
 
-func _player() -> CharacterBody3D:
-	return get_tree().get_first_node_in_group("player") as CharacterBody3D
+## The cube this blade hunts. Whichever one is closest to it, so a saw does not
+## walk past the player in front of it to chase somebody across the maze
+func _player() -> Player:
+	if mover == null or mover.parent == null:
+		return null
+
+	if mover.seat >= 0:
+		return Player.at_seat(get_tree(), mover.seat)
+
+	return Player.nearest(get_tree(), mover.parent.global_position)
 
 
 func _cell_of_player() -> Vector2i:

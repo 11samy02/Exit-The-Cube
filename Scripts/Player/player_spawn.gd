@@ -81,23 +81,32 @@ func entrance_lead() -> float:
 ## Puts the cube back after a death that did not tear the level down, which is
 ## how a round that has to keep running handles one. The body is carried back to
 ## where it came in and the whole entrance is played again from there, so a
-## respawn looks like a spawn rather than a cube blinking back into a corridor
+## respawn looks like a spawn rather than a cube blinking back into a corridor.
+##
+## The fallback is the cell the level actually started at rather than the first
+## of the candidates, which is a different cell entirely: the spawner draws one
+## at random out of that shuffled list and only remembers the one it drew
 func respawn() -> void:
 	var spawner := get_tree().get_first_node_in_group("player_spawner") as PlayerSpawner
+	var cube := Player.of(self)
 	var body := movement.body
-	var cell := Online.respawn_cell()
+	var cell := Match.respawn_cell(cube.account()) if cube != null else Vector2i(-1, -1)
+
+	var seat := cube.seat if cube != null else 0
+	var offset := spawner.seat_offset(seat, maxi(Match.cube_count(), 1)) if spawner != null \
+		else Vector3.ZERO
 
 	if spawner != null and cell.x >= 0:
-		body.global_position = spawner.cell_to_world(cell)
-	elif spawner != null and not spawner.spawn_points.is_empty():
-		body.global_position = spawner.cell_to_world(spawner.spawn_points[0])
+		body.global_position = spawner.cell_to_world(cell) + offset
+	elif spawner != null:
+		body.global_position = spawner.cell_to_world(spawner.current_player_cell) + offset
 
 	body.velocity = Vector3.ZERO
 	mesh.scale = Vector3.ONE
 
 	var field := get_tree().get_first_node_in_group(PaintField.GROUP) as PaintField
-	if field != null:
-		field.forget_last_cell()
+	if field != null and cube != null:
+		field.forget_last_cell(cube.seat)
 
 	if Settings.spawn_animation:
 		_hold()

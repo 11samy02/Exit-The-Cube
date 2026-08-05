@@ -62,7 +62,7 @@ func open() -> void:
 		return
 
 	_paused = true
-	get_tree().paused = not Online.is_racing()
+	get_tree().paused = not Match.is_racing()
 	_root.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	UiFeedback.play_click()

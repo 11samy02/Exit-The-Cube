@@ -68,7 +68,7 @@ func _input(event: InputEvent) -> void:
 ## freeze the map: the other cubes are still running around in there and this
 ## one may want to watch them
 func open() -> void:
-	if _root.visible or Online.is_racing():
+	if _root.visible or Match.is_racing():
 		return
 
 	_fill()

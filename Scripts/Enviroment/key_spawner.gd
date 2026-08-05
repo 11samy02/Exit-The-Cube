@@ -29,6 +29,10 @@ class_name KeySpawner
 ## -1 = new candidate positions on every map, otherwise a fixed seed
 @export var spawn_seed: int = -1
 
+## How far apart keys sharing one cell hang, in meters. Inside the cell, so none
+## of them ends up inside a wall
+const KEY_RING := 0.5
+
 var rng := RandomNumberGenerator.new()
 
 ## Steps through the maze from where the player starts to every cell of it,
@@ -38,8 +42,12 @@ var player_field: Array = []
 ## The stored candidate spawn positions (grid coordinates)
 var spawn_points: Array[Vector2i] = []
 
-## The currently spawned key instance, if any
+## The currently spawned key instance, if any. With one key per cube this is the
+## first of them, which is what the saws and the elevator place themselves by
 var current_key_instance: Node3D = null
+
+## Every key in the level, one per entry in the accounts it was given
+var current_keys: Array[Key] = []
 
 ## The cell the current key stands in, only valid after spawn_key() has run
 var current_key_cell: Vector2i = Vector2i.ZERO
@@ -122,20 +130,54 @@ func _shuffle(cells: Array[Vector2i]) -> void:
 ## Removes the current key instance (if any) and spawns a new one at a
 ## random position picked from the stored spawn_points.
 func spawn_key() -> void:
+	spawn_keys([])
+
+
+## One key per account, or a single unowned one when the list is empty, which is
+## what the campaign and an online race both want.
+##
+## They all go into the one cell this spawner drew. A key each in a corner each
+## would make the race a draw for who got the short walk — everybody starts on
+## the same tile, so everybody's way out has to start on the same tile too. Only
+## the last step is theirs alone: the keys sit in a small ring and each one is
+## deaf to everybody but its owner
+func spawn_keys(accounts: Array[int]) -> void:
 	if spawn_points.is_empty():
 		push_error("KeySpawner: no spawn points generated yet!")
 		return
 
-	if current_key_instance != null and is_instance_valid(current_key_instance):
-		current_key_instance.queue_free()
+	for existing in current_keys:
+		if is_instance_valid(existing):
+			existing.queue_free()
 
-	var chosen: Vector2i = spawn_points[rng.randi_range(0, spawn_points.size() - 1)]
-	current_key_cell = chosen
-	var world_pos := _cell_to_world(chosen)
+	current_keys.clear()
+	current_key_cell = spawn_points[rng.randi_range(0, spawn_points.size() - 1)]
 
-	current_key_instance = key.instantiate()
-	holder.add_child(current_key_instance)
-	current_key_instance.global_position = world_pos
+	var count := maxi(accounts.size(), 1)
+
+	for at in range(count):
+		var owner: int = accounts[at] if at < accounts.size() else 0
+		current_keys.append(_spawn_one(owner, current_key_cell, at, count))
+
+	current_key_instance = current_keys[0]
+
+
+func _spawn_one(owner: int, cell: Vector2i, at: int, total: int) -> Key:
+	var made := key.instantiate() as Key
+	made.owner_account = owner
+	holder.add_child(made)
+	made.global_position = _cell_to_world(cell) + _ring_offset(at, total)
+	return made
+
+
+## Where in the little ring that key hangs. Nothing at all for a single one, so
+## a campaign key is exactly where it always was
+func _ring_offset(at: int, total: int) -> Vector3:
+	if total <= 1:
+		return Vector3.ZERO
+
+	var around := TAU * float(at) / float(total)
+	return Vector3(cos(around), 0.0, sin(around)) * KEY_RING
 
 
 ## Converts a grid cell coordinate into a world position, using the

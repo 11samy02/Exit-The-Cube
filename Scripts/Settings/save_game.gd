@@ -1,9 +1,26 @@
 extends Node
 
-## How far the campaign got. One slot, written every time a level is cleared and
-## read by the continue button on the title screen
+## How far the campaign got. One slot per way of playing it, written every time a
+## level is cleared and read by the continue button on the title screen.
+##
+## Two people playing through the game together are not playing the campaign one
+## of them started alone, so a co-op clear must never move somebody else's
+## continue point. The fields below are always the slot that is being played;
+## switching slots puts the old one away and brings the other one out, which is
+## why nothing that reads them had to learn about any of this
 
 const SAVE_PATH := "user://save.cfg"
+
+## Which campaign is being played
+enum Slot { SOLO, COOP }
+
+## Where each slot is written in the file
+const SECTIONS := {
+	Slot.SOLO: ["campaign", "run"],
+	Slot.COOP: ["campaign_coop", "run_coop"],
+}
+
+var slot: int = Slot.SOLO
 
 ## The level a continue picks the campaign up at, -1 while there is nothing to
 ## pick up
@@ -22,12 +39,50 @@ var items_used: int = 0
 ## fastest way through a level is rarely also the cleanest one
 var records: Dictionary = {}
 
+## Every slot that is not the one being played, by its enum value
+var _slots: Dictionary = {}
+
 
 ## The slot is written off the run that just ended, so it is listened for here
 ## instead of every place that finishes a level having to remember to save
 func _ready() -> void:
 	_load()
 	GameState.run_finished.connect(_on_run_finished)
+
+
+## Puts the slot that was being played away and brings another one out. Called
+## before anything reads has_save or unlocked_picks, so the title screen and the
+## level selection show the campaign that is about to be played
+func use_slot(new_slot: int) -> void:
+	if new_slot == slot:
+		return
+
+	_stash()
+	slot = new_slot
+	_unstash()
+
+
+## Keeps the slot that is being left, so switching back and forth does not need
+## the file
+func _stash() -> void:
+	_slots[slot] = {
+		"level_index": level_index,
+		"deaths": deaths,
+		"run_time": run_time,
+		"items_collected": items_collected,
+		"items_used": items_used,
+		"records": records,
+	}
+
+
+func _unstash() -> void:
+	var held: Dictionary = _slots.get(slot, {})
+	level_index = int(held.get("level_index", -1))
+	deaths = int(held.get("deaths", 0))
+	run_time = float(held.get("run_time", 0.0))
+	items_collected = int(held.get("items_collected", 0))
+	items_used = int(held.get("items_used", 0))
+	records = held.get("records", {})
 
 
 ## True while there is a level left to pick up. A campaign that was played to
@@ -121,14 +176,26 @@ func _remember(index: int, time: float, deaths_taken: int) -> void:
 	}
 
 
+## Both slots go into the one file, each under its own pair of sections. A save
+## written before co-op existed only has the solo pair and loads unchanged
 func _write() -> void:
+	_stash()
+
 	var config := ConfigFile.new()
-	config.set_value("campaign", "level_index", level_index)
-	config.set_value("campaign", "records", records)
-	config.set_value("run", "deaths", deaths)
-	config.set_value("run", "run_time", run_time)
-	config.set_value("run", "items_collected", items_collected)
-	config.set_value("run", "items_used", items_used)
+
+	for which: int in SECTIONS:
+		var held: Dictionary = _slots.get(which, {})
+		if held.is_empty():
+			continue
+
+		var sections: Array = SECTIONS[which]
+		config.set_value(sections[0], "level_index", held["level_index"])
+		config.set_value(sections[0], "records", held["records"])
+		config.set_value(sections[1], "deaths", held["deaths"])
+		config.set_value(sections[1], "run_time", held["run_time"])
+		config.set_value(sections[1], "items_collected", held["items_collected"])
+		config.set_value(sections[1], "items_used", held["items_used"])
+
 	config.save(SAVE_PATH)
 
 
@@ -137,9 +204,15 @@ func _load() -> void:
 	if config.load(SAVE_PATH) != OK:
 		return
 
-	level_index = int(config.get_value("campaign", "level_index", -1))
-	records = config.get_value("campaign", "records", {})
-	deaths = int(config.get_value("run", "deaths", 0))
-	run_time = float(config.get_value("run", "run_time", 0.0))
-	items_collected = int(config.get_value("run", "items_collected", 0))
-	items_used = int(config.get_value("run", "items_used", 0))
+	for which: int in SECTIONS:
+		var sections: Array = SECTIONS[which]
+		_slots[which] = {
+			"level_index": int(config.get_value(sections[0], "level_index", -1)),
+			"records": config.get_value(sections[0], "records", {}),
+			"deaths": int(config.get_value(sections[1], "deaths", 0)),
+			"run_time": float(config.get_value(sections[1], "run_time", 0.0)),
+			"items_collected": int(config.get_value(sections[1], "items_collected", 0)),
+			"items_used": int(config.get_value(sections[1], "items_used", 0)),
+		}
+
+	_unstash()
