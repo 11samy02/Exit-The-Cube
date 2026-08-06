@@ -222,7 +222,7 @@ func _restock_one() -> void:
 	if free_cells.is_empty():
 		return
 
-	var cell: Vector2i = free_cells[randi() % free_cells.size()]
+	var cell: Vector2i = free_cells[rng.randi_range(0, free_cells.size() - 1)]
 	var before := spawned_items.size()
 	_place_item(cell)
 

@@ -36,4 +36,5 @@ saw_spawn_seed = 1015
 elevator_spawn_seed = 1016
 item_spawn_seed = 1017
 player_spawn_seed = 1018
+glass_wall_seed = 1019
 metadata/_custom_type_script = "uid://c5r0kdhebd8lu"
