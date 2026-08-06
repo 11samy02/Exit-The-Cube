@@ -258,7 +258,7 @@ func _add_rule(grid: GridContainer, key: String, title: String) -> void:
 
 	cell.add_child(OnlineUi.body(title, 19, OnlineUi.MUTED))
 
-	var picker := OnlineUi.choice(RaceRules.labels_for(key), int(Online.settings.get(key, 0)), \
+	var picker := OnlineUi.choice(_labels_for(key), int(Online.settings.get(key, 0)), \
 		Online.is_host)
 	picker.item_selected.connect(_on_rule_picked.bind(key))
 	cell.add_child(picker)

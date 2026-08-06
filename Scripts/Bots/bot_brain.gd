@@ -86,6 +86,10 @@ const SPHERE_WORTH := 2.0
 ## guaranteed to be getting closer with every cell, so it needs an end
 const ROUTE_CAP := 512
 
+## How much further the top rung reads the blades than the rest. Far enough that
+## nothing it could walk into inside its own lookahead is missed
+const ALL_SEEING_REACH := 2.5
+
 ## How many cells of detour a blade in the way is worth going around. Under it
 ## the bot walks through and takes its chances, over it there is no corner of the
 ## maze it will not walk to rather than wait
@@ -707,6 +711,21 @@ func _downhill(field: Array, from: Vector2i) -> Array[Vector2i]:
 ## a blade costs several, so the detour wins on its own — and where every way is
 ## blocked all of them are penalised alike and the bot goes through and deals
 ## with it on the way
+## True while a step of the route is close enough for a blade to be worth
+## weighing.
+##
+## Only the first few cells. A route across a map is hundreds of cells, and
+## checking every neighbour of every one of them against every blade is what
+## brought a medium map to one frame a second — the cost grew with the length of
+## the walk and the size of the level at the same time. It bought nothing either:
+## the prediction only reaches about a second ahead, so a cell forty steps out
+## was being judged against where a blade happens to be standing now, which says
+## nothing about where it will be when the cube arrives
+func _weighs_blades(walked: int) -> bool:
+	return _skill.routes_around_blades and not _desperate() \
+		and walked <= _skill.look_ahead_cells
+
+
 func _step_down(field: Array, cell: Vector2i, walked: int, seen: Dictionary) -> Vector2i:
 	var walker := _squad.map_generator
 	var best := cell
@@ -722,7 +741,7 @@ func _step_down(field: Array, cell: Vector2i, walked: int, seen: Dictionary) -> 
 			continue
 
 		var cost := float(gap)
-		if _skill.routes_around_blades and not _desperate() and _blade_on(neighbour, walked):
+		if _weighs_blades(walked) and _blade_on(neighbour, walked):
 			cost += BLADE_COST
 
 		if cost < cheapest:
@@ -771,6 +790,14 @@ func _dodge_or_go() -> Vector3:
 	return wanted.limit_length(1.0) * _skill.pace
 
 
+## How far out blades are read. The top rung sees far further than the rest, but
+## not the whole map: a blade across a maze cannot reach this cube inside the
+## second the prediction covers, and reading two hundred of them every frame for
+## every bot is a level that runs at walking pace
+func _blade_reach(reach: float) -> float:
+	return reach * ALL_SEEING_REACH if _skill.sees_all_blades else reach
+
+
 ## Where every blade near this cube is going to be. Culled by plain distance
 ## first, so a maze full of saws costs one length check each
 func _read_blades() -> void:
@@ -785,8 +812,7 @@ func _read_blades() -> void:
 		if mover == null or mover.parent == null or not mover.parent.visible:
 			continue
 
-		if not _skill.sees_all_blades \
-				and _flat(at - mover.parent.global_position).length() > reach:
+		if _flat(at - mover.parent.global_position).length() > _blade_reach(reach):
 			continue
 
 		_near.append(mover)

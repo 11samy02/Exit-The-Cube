@@ -153,7 +153,7 @@ func kill(force: bool = false) -> void:
 		death_sound.play()
 		_flash()
 
-	if Match.serves_penalty():
+	if Match.serves_penalty() or (cube != null and cube.is_ghosted()):
 		await _sit_out()
 		return
 
@@ -190,13 +190,28 @@ func _sit_out_together(coop: CoopCoordinator, survived: float) -> void:
 	coop.report_death(seat)
 
 
-## What dying costs in a painting round.
+## How long that cube stays down. A mode with a penalty of its own says so; a
+## ghost in a race has none, and it takes the co-op wait rather than the tenth of
+## a second the floor of the sum would leave it with
+func _wait_for(cube: Player) -> float:
+	var own := Match.death_penalty_seconds()
+	if own > 0.0:
+		return own
+
+	return CoopCoordinator.RESPAWN_SECONDS if cube != null and cube.is_ghosted() else 0.0
+
+
+## What dying costs in a painting round, and what it costs a bot anywhere.
 ##
 ## The level is not rebuilt. A round is five minutes with everybody dying in it
 ## repeatedly, and tearing the maze down and putting it back each time would
 ## spend most of the round on loading screens — worse, it would reset the blades
-## for one player and not the others. The cube simply sits out its penalty and is
-## put back where it came in.
+## for one player and not the others.
+##
+## A CPU in a race goes the same way, and that is the whole reason it does: a bot
+## bursting used to reload the level it was standing in, which in a race is the
+## player's own maze. One CPU walking into a blade sent everybody back to the
+## start line.
 ##
 ## The tiles go first so that the others see the hole appear at the moment of the
 ## death rather than five seconds later
@@ -211,7 +226,7 @@ func _sit_out() -> void:
 	var spawner := cube.spawn if cube != null else null
 	var lead := spawner.entrance_lead() if spawner != null else 0.0
 
-	await get_tree().create_timer(maxf(Match.death_penalty_seconds() - lead, 0.1)).timeout
+	await get_tree().create_timer(maxf(_wait_for(cube) - lead, 0.1)).timeout
 	if not is_inside_tree():
 		return
 
