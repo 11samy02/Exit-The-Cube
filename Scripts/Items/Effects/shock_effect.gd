@@ -33,8 +33,6 @@ class_name ShockEffect
 
 
 func _start() -> void:
-	show_vignette(0.8)
-
 	if not Match.is_painting() or player == null:
 		stop(false)
 		return

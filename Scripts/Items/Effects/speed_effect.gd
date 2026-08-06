@@ -23,7 +23,6 @@ var slowed: Array[SawMover] = []
 
 
 func _start() -> void:
-	show_vignette(0.7)
 	movement = player.movement if player != null else null
 	if movement != null:
 		movement.set_boost(&"speed", player_multiplier)

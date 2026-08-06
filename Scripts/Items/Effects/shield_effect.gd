@@ -12,7 +12,6 @@ var _used: bool = false
 
 
 func _start() -> void:
-	show_vignette(0.85)
 	death = player.death if player != null else null
 	if death == null:
 		return

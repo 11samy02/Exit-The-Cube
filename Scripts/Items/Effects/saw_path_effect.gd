@@ -21,7 +21,6 @@ var revealed: Array[SawMover] = []
 
 
 func _start() -> void:
-	show_vignette(0.5)
 	_update_routes()
 
 

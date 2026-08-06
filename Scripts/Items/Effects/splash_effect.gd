@@ -35,7 +35,6 @@ func _start() -> void:
 		stop(false)
 		return
 
-	show_vignette(0.7)
 	_rings = _reachable_rings()
 	_throw_the_paint()
 

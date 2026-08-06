@@ -60,7 +60,6 @@ var bob_time: float = 0.0
 ## The arrow is placed by hand every frame, so it hangs outside of the player
 ## transform instead of being dragged around by it
 func _start() -> void:
-	show_vignette(0.5)
 	perspective = player.perspective if player != null else null
 	if perspective != null:
 		camera = perspective.camera

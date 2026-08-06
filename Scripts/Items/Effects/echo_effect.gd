@@ -52,7 +52,6 @@ var _next_ring: float = 0.0
 
 
 func _start() -> void:
-	show_vignette(0.55)
 	map_generator = get_tree().get_first_node_in_group("map_generator") as MapGenerator
 	if map_generator == null:
 		push_warning("EchoEffect: no map generator in the level, the waves have no corridors to run")

@@ -27,6 +27,12 @@ const PANEL_DROP := Vector2(0, -60)
 const STRIP_WIDTH := 340.0
 const STRIP_MARGIN := 26.0
 
+## How tall the two lists of runners may get before they scroll instead of
+## growing. A dozen cubes in a round is a dozen rows, and neither the corner nor
+## the result panel may be a different shape for it
+const STRIP_ROWS_HEIGHT := 232.0
+const PANEL_ROWS_HEIGHT := 460.0
+
 ## The border and the padding one framed row of the results panel costs, which
 ## is how far the column titles over it have to be pushed in to line up
 const ROW_INSET := 18
@@ -106,6 +112,24 @@ func _process(delta: float) -> void:
 		_redraw()
 
 
+## Puts a list behind a ceiling it may scroll under.
+##
+## A round of twelve is twelve rows, and a panel that simply grew with them ran
+## off the top and the bottom of the screen and took the buttons with it. The
+## height is fixed and the list moves inside it instead, so the board is the same
+## shape whether there are two cubes in the maze or a dozen
+func _capped(rows: Control, height: float) -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.follow_focus = true
+	scroll.custom_minimum_size = Vector2(0, height)
+	scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	scroll.add_child(rows)
+	return scroll
+
+
 ## The strip in the corner. Everybody in the race, in the order they stand, so a
 ## glance sideways is enough to know whether the friend two rooms over is ahead
 func _build_standings() -> void:
@@ -133,7 +157,8 @@ func _build_standings() -> void:
 
 	_standings = VBoxContainer.new()
 	_standings.add_theme_constant_override("separation", 4)
-	column.add_child(_standings)
+	_standings.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(_capped(_standings, STRIP_ROWS_HEIGHT))
 
 	column.add_child(OnlineUi.gap(4))
 	_link = OnlineUi.body("", 15, OnlineUi.MUTED)
@@ -208,7 +233,8 @@ func _build_panel() -> void:
 
 	_panel_rows = VBoxContainer.new()
 	_panel_rows.add_theme_constant_override("separation", 6)
-	column.add_child(_panel_rows)
+	_panel_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(_capped(_panel_rows, PANEL_ROWS_HEIGHT))
 
 	column.add_child(OnlineUi.gap(14))
 	column.add_child(_build_buttons())

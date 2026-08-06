@@ -88,7 +88,6 @@ func _start() -> void:
 
 	_retarget()
 	time_left = maxf(time_left, life)
-	show_vignette(0.5)
 
 
 func _tick(delta: float) -> void:

@@ -44,7 +44,6 @@ func _start() -> void:
 		stop(false)
 		return
 
-	show_vignette(0.6)
 	_try_launch()
 
 
