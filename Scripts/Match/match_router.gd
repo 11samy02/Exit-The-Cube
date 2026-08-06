@@ -306,7 +306,7 @@ func has_bots() -> bool:
 ## is the opposite: there the floor is the point and a bot that could not paint
 ## would not be playing
 func bots_are_ghosts() -> bool:
-	return is_racing() and session.mode().with_exit
+	return is_private_race()
 
 
 ## What the bots of this round are like, null while there are none
@@ -397,52 +397,19 @@ func seat_of_account(account: int) -> int:
 ## player's, so nothing has to be split. On one screen there is a single maze,
 ## and a race through it needs a way out each
 func key_owners() -> Array[int]:
-	if session == null or not session.mode().with_exit:
+	if kind != Kind.PARTY or session == null or not session.mode().with_exit:
 		return [] as Array[int]
 
 	var owners: Array[int] = []
-
-	if kind == Kind.PARTY:
-		for id: int in session.runners:
-			owners.append(id)
-
-		return owners
-
-	if not has_bots():
-		return owners
-
-	owners.append(0)
-
-	for account in _seat_accounts:
-		if is_bot_seat(seat_of_account(account)):
-			owners.append(account)
+	for id: int in session.runners:
+		owners.append(id)
 
 	return owners
 
 
-## Where that cube was when the level was last torn down, or nothing.
-##
-## A player dying online rebuilds their own maze, and the bots the host runs came
-## back with it — every CPU in the race jumped to the start line on every screen
-## because one person walked into a blade. Their run is in the round rather than
-## in the map, so putting them back where they were is all it takes
-func remembered_spot(account: int) -> Vector3:
-	if session == null:
-		return Vector3.ZERO
-
-	var runner: Dictionary = session.runners.get(account, {})
-	if runner.is_empty() or not bool(runner["placed"]):
-		return Vector3.ZERO
-
-	return runner["position"] as Vector3
-
-
 ## True once that cube may use the exit
 func has_key(account: int) -> bool:
-	if session == null:
-		return GameState.has_key
-
-	if kind == Kind.PARTY or not is_mine(account):
+	if kind == Kind.PARTY and session != null:
 		return session.has_key(account)
 
 	return GameState.has_key

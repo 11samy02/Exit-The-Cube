@@ -116,15 +116,5 @@ static func count_in(settings: Dictionary, humans: int) -> int:
 	return clampi(int(settings.get(COUNT_KEY, 0)), 0, max_bots(humans))
 
 
-## The same count read off a lobby, clamped by nothing but the size of a room.
-##
-## Every machine has to reach the same number or the boards disagree about who is
-## even in the race — and the member list is exactly the thing that arrives at a
-## different moment on each of them, so it may not be part of the sum. The lobby
-## setting is the only input
-static func count_in_lobby(settings: Dictionary) -> int:
-	return clampi(int(settings.get(COUNT_KEY, 0)), 0, max_players() - 1)
-
-
 static func skill_in(settings: Dictionary) -> BotSkill:
 	return skill_of(int(settings.get(SKILL_KEY, default_skill())))
