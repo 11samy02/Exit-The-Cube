@@ -108,6 +108,28 @@ func draw_teams() -> void:
 	team_colors = RaceRules.roll_team_colors(race_seed, sides)
 
 
+## Works the sides out again after somebody turned up late.
+##
+## The draw is a pure function of the accounts and the seed, so every machine
+## reaches the same answer once it knows about everybody. A machine that was one
+## callback short when the race opened drew without that player though, and had
+## them on the wrong side for the rest of it — which is how one painted floor
+## came out two different colours on two screens.
+##
+## Only the sides are worked out again. The colours come off the seed and have
+## not moved, and the floor stays exactly where it is: the tiles are simply
+## re-filed under whoever actually owns them
+func redraw_teams() -> void:
+	if not is_paint():
+		return
+
+	teams = TeamDraw.teams_of(runners.keys(), RaceRules.team_count(settings), race_seed)
+
+	for cell: Vector2i in paint.claims:
+		var claim: PaintState.Claim = paint.claims[cell]
+		claim.team = team_of(claim.owner)
+
+
 ## Hands out the starting cells once the maze exists. Called by the map, which
 ## is the first thing that knows where the corridors are.
 ##

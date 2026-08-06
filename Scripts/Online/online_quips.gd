@@ -110,6 +110,18 @@ const RESULT_WAITING := [
 ## The three lines the results panel picks between, by where the player landed.
 ## Coming second out of two is not being last, it is being second, and a line
 ## about the elevator waiting reads as a joke at the wrong player
+## Which pool a finishing place falls in, by name, so the text file can reach
+## each of them on its own rather than all three under one heading
+static func result_key(rank: int, finishers: int) -> String:
+	if rank <= 1:
+		return "online_result_first"
+
+	if finishers >= 3 and rank >= finishers:
+		return "online_result_last"
+
+	return "online_result_mid"
+
+
 static func result_pool(rank: int, finishers: int) -> Array:
 	if rank <= 1:
 		return RESULT_FIRST

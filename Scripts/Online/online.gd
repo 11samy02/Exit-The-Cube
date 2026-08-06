@@ -964,6 +964,7 @@ func _is_racer(sender: int) -> bool:
 	for member in members:
 		if int(member["id"]) == sender:
 			Match.session.add_runner(sender, String(member["name"]))
+			Match.session.redraw_teams()
 			return true
 
 	return false

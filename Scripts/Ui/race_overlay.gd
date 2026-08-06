@@ -681,7 +681,9 @@ func _show_panel() -> void:
 	else:
 		var rank := Match.rank_of(_me())
 		_panel_title.text = _title_for(rank)
-		_panel_comment.text = Quips.pick("online_result", 			OnlineQuips.result_pool(rank, Match.finisher_count()))
+		_panel_comment.text = Quips.pick(
+			OnlineQuips.result_key(rank, Match.finisher_count()),
+			OnlineQuips.result_pool(rank, Match.finisher_count()))
 
 	_redraw()
 

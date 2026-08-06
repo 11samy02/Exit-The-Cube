@@ -10,6 +10,11 @@ extends Control
 
 const TITLE_SCENE := "res://Scenes/Ui/title_screen.tscn"
 
+## How many settings stand side by side. One under the other left a column of
+## dropdowns as wide as the panel with nothing beside them, which read as a form
+## rather than as the rules of a round
+const RULE_COLUMNS := 2
+
 ## How often the whole panel is rebuilt off Steam even without a callback. A
 ## dropped update would otherwise leave somebody looking at a stale ready count
 const REFRESH_INTERVAL := 1.0
@@ -206,14 +211,19 @@ func _build_rules() -> Control:
 	frame.add_child(column)
 
 	column.add_child(OnlineUi.heading("RULES", 26, OnlineUi.ACCENT))
-	column.add_child(OnlineUi.gap(6))
 
-	_add_rule(column, "mode", "GAME MODE")
-	_add_rule(column, "size", "MAP SIZE")
-	_add_rule(column, "shape", "MAP SHAPE")
-	_add_rule(column, "difficulty", "DIFFICULTY")
-	_add_rule(column, "teams", "TEAMS")
-	_add_rule(column, "minutes", "ROUND TIME")
+	var grid := GridContainer.new()
+	grid.columns = RULE_COLUMNS
+	grid.add_theme_constant_override("h_separation", 24)
+	grid.add_theme_constant_override("v_separation", 14)
+	column.add_child(grid)
+
+	_add_rule(grid, "mode", "GAME MODE")
+	_add_rule(grid, "size", "MAP SIZE")
+	_add_rule(grid, "shape", "MAP SHAPE")
+	_add_rule(grid, "difficulty", "DIFFICULTY")
+	_add_rule(grid, "teams", "TEAMS")
+	_add_rule(grid, "minutes", "ROUND TIME")
 
 	column.add_child(OnlineUi.gap(4))
 	_random_button = OnlineUi.button("SURPRISE US")
@@ -225,20 +235,21 @@ func _build_rules() -> Control:
 
 ## Keeps the label, the dropdown and the space under it together, so a setting
 ## the chosen mode has no use for can be taken off the column as one piece
-func _add_rule(column: VBoxContainer, key: String, title: String) -> void:
-	var label := OnlineUi.body(title, 20, OnlineUi.MUTED)
-	column.add_child(label)
+func _add_rule(grid: GridContainer, key: String, title: String) -> void:
+	var cell := VBoxContainer.new()
+	cell.add_theme_constant_override("separation", 4)
+	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_child(cell)
+
+	cell.add_child(OnlineUi.body(title, 19, OnlineUi.MUTED))
 
 	var picker := OnlineUi.choice(RaceRules.labels_for(key), int(Online.settings.get(key, 0)), \
 		Online.is_host)
 	picker.item_selected.connect(_on_rule_picked.bind(key))
-	column.add_child(picker)
-
-	var spacer := OnlineUi.gap(6)
-	column.add_child(spacer)
+	cell.add_child(picker)
 
 	_pickers[key] = picker
-	_rule_rows[key] = [label, picker, spacer]
+	_rule_rows[key] = [cell]
 
 
 func _build_actions() -> void:
@@ -291,8 +302,20 @@ func _wire_rule_focus() -> void:
 		if picker.visible:
 			pickers.append(picker)
 
-	pickers.append(_random_button)
-	OnlineUi.link_column(pickers)
+	var chain := pickers.duplicate()
+	chain.append(_random_button)
+	OnlineUi.link_column(chain)
+	_link_rows(pickers)
+
+
+## Ties each pair of settings on one row of the grid together sideways, which is
+## what a grid has to answer for that a single column never did
+func _link_rows(pickers: Array) -> void:
+	for at in range(0, pickers.size() - 1, RULE_COLUMNS):
+		var left: Control = pickers[at]
+		var right: Control = pickers[at + 1]
+		left.focus_neighbor_right = left.get_path_to(right)
+		right.focus_neighbor_left = right.get_path_to(left)
 
 
 ## Everything on the screen comes from one place, so a callback, a timer tick
@@ -560,14 +583,17 @@ func _on_random_pressed() -> void:
 ## The line under the title says something different to the host, to a member,
 ## and to a room that is only waiting on somebody to press start
 func _swap_quip() -> void:
+	var key := "online_lobby_waiting"
 	var pool := OnlineQuips.LOBBY_WAITING
 
 	if Online.everyone_ready() and Online.members.size() > 1:
+		key = "online_lobby_ready"
 		pool = OnlineQuips.LOBBY_ALL_READY
 	elif not Online.is_host:
+		key = "online_lobby_member"
 		pool = OnlineQuips.LOBBY_MEMBER
 
-	_quip.text = Quips.pick("online_lobby", pool)
+	_quip.text = Quips.pick(key, pool)
 
 
 func _on_leave_pressed() -> void:
