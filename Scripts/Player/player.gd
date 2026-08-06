@@ -25,6 +25,12 @@ const ACCOUNT_STEP := 137
 ## input, a camera or a piece of the window that a bot does not have
 @export var is_bot: bool = false
 
+## True for a cube that was already out there before the level was rebuilt and
+## has simply been put back where it was. It skips the entrance: a CPU that
+## nobody killed must not pull itself together out of a swarm of debris just
+## because somebody else walked into a blade
+@export var carried_over: bool = false
+
 @onready var movement: PlayerMovement = $Scripts/Movement
 @onready var camera_rig: PlayerCamera = $Scripts/Camera
 @onready var perspective: PlayerPerspective = $Scripts/Perspective

@@ -146,22 +146,15 @@ func _spawn_one(seat: int, cell: Vector2i, total: int) -> Player:
 	var cube := player_scene.instantiate() as Player
 	cube.seat = seat
 	cube.is_bot = Match.is_bot_seat(seat)
+
+	var spot := Match.remembered_spot(cube.account()) if cube.is_bot else Vector3.ZERO
+	cube.carried_over = spot != Vector3.ZERO
+
 	holder.add_child(cube)
-	cube.global_position = _where(cube, cell, total)
+	cube.global_position = spot if cube.carried_over \
+		else cell_to_world(cell) + seat_offset(seat, total)
+
 	return cube
-
-
-## Where that cube goes in. Its own start cell, unless it is a bot that was
-## already out there running: a player dying rebuilds the whole map, and the
-## CPUs the host is driving must not be handed back to the start line because
-## somebody else walked into a blade
-func _where(cube: Player, cell: Vector2i, total: int) -> Vector3:
-	if cube.is_bot:
-		var spot := Match.remembered_spot(cube.account())
-		if spot != Vector3.ZERO:
-			return spot
-
-	return cell_to_world(cell) + seat_offset(cube.seat, total)
 
 
 ## How far off the shared cell that seat stands. Nothing at all for a single

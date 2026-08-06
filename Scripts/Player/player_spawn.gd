@@ -62,6 +62,9 @@ var is_spawning: bool = false
 
 
 func _ready() -> void:
+	if Player.of(self).carried_over:
+		return
+
 	if Settings.spawn_animation:
 		_hold()
 

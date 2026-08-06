@@ -425,13 +425,18 @@ func key_owners() -> Array[int]:
 ## A player dying online rebuilds their own maze, and the bots the host runs came
 ## back with it — every CPU in the race jumped to the start line on every screen
 ## because one person walked into a blade. Their run is in the round rather than
-## in the map, so putting them back where they were is all it takes
+## in the map, so putting them back where they were is all it takes.
+##
+## Whether the cube is standing in the level right now is deliberately not asked.
+## The moment the map goes down every cube is gone and the round writes them all
+## down as unplaced, so a spot that was only kept while somebody was standing on
+## it is wiped a frame before the thing that needs it comes looking
 func remembered_spot(account: int) -> Vector3:
 	if session == null:
 		return Vector3.ZERO
 
 	var runner: Dictionary = session.runners.get(account, {})
-	if runner.is_empty() or not bool(runner["placed"]):
+	if runner.is_empty():
 		return Vector3.ZERO
 
 	return runner["position"] as Vector3

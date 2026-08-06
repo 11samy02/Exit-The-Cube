@@ -39,11 +39,15 @@ var _quip_timer: float = QUIP_INTERVAL
 
 ## Online is always one cube per machine, so whatever the splitscreen left in
 ## the seat table is put away before the lobby is opened
+## Nothing online is played out of a seat — the whole of it runs on one cube and
+## the Steam account behind it, and this node never asks the seat table anything.
+## It used to sit a keyboard down and lock the room here anyway, which told the
+## rest of the game a keyboard was playing while somebody was holding a pad.
+## Clearing is still worth doing: a party left the room locked with a private
+## copy of every action per seat, and those have to go before a race opens
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	Seats.clear()
-	Seats.claim_keyboard()
-	Seats.lock()
 
 	add_child(OnlineUi.background())
 	move_child(get_child(get_child_count() - 1), 0)
