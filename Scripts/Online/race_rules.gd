@@ -219,6 +219,11 @@ static func _random_top(key: String) -> int:
 	return maxi(options_for(key).size() + int(RANDOM_RANGE[key]["to"]), 0)
 
 
+## What one setting may be set to. A key this does not know is a mistake at the
+## call site and says so — it used to hand back the difficulty ladder for
+## anything it did not recognise, so a dropdown asking for something else was
+## quietly filled with STROLL, EASY, NORMAL, HARD, NIGHTMARE and stored whatever
+## the player picked out of it as if it had been the right question
 static func options_for(key: String) -> Array:
 	match key:
 		"mode":
@@ -231,8 +236,11 @@ static func options_for(key: String) -> Array:
 			return book().team_counts
 		"minutes":
 			return book().round_minutes
+		"difficulty":
+			return book().difficulties
 
-	return book().difficulties
+	push_error("RaceRules: nothing is listed under the setting %s" % key)
+	return [] as Array
 
 
 static func allows_random(key: String) -> bool:
