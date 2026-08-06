@@ -300,13 +300,13 @@ func has_bots() -> bool:
 
 ## True while a bot may not touch anything the players share.
 ##
-## Any race, over a wire or on one screen. Everybody is running the same maze as
-## their own, so a CPU is a shape going past in it and nothing more — it takes no
-## sphere off the floor, opens nobody's doors and leaves no blood on the walls.
-## A painting round is the opposite: there the floor is the point and a bot that
-## could not paint would not be playing
+## A race on one screen: everybody is running the same maze as their own, so a
+## CPU is a shape going past in it and nothing more — it takes no sphere off the
+## floor, opens nobody's doors and leaves no blood on the walls. A painting round
+## is the opposite: there the floor is the point and a bot that could not paint
+## would not be playing
 func bots_are_ghosts() -> bool:
-	return is_racing() and session.mode().with_exit
+	return is_private_race()
 
 
 ## What the bots of this round are like, null while there are none
@@ -397,35 +397,19 @@ func seat_of_account(account: int) -> int:
 ## player's, so nothing has to be split. On one screen there is a single maze,
 ## and a race through it needs a way out each
 func key_owners() -> Array[int]:
-	if session == null or not session.mode().with_exit:
+	if kind != Kind.PARTY or session == null or not session.mode().with_exit:
 		return [] as Array[int]
 
 	var owners: Array[int] = []
-
-	if kind == Kind.PARTY:
-		for id: int in session.runners:
-			owners.append(id)
-
-		return owners
-
-	if not has_bots():
-		return owners
-
-	owners.append(0)
-
-	for account in _seat_accounts:
-		if is_bot_seat(seat_of_account(account)):
-			owners.append(account)
+	for id: int in session.runners:
+		owners.append(id)
 
 	return owners
 
 
 ## True once that cube may use the exit
 func has_key(account: int) -> bool:
-	if session == null:
-		return GameState.has_key
-
-	if kind == Kind.PARTY or not is_mine(account):
+	if kind == Kind.PARTY and session != null:
 		return session.has_key(account)
 
 	return GameState.has_key
