@@ -49,6 +49,9 @@ var _start_note: Label = null
 var _prompts: HBoxContainer = null
 var _leaving: bool = false
 
+## The campaign picker, built only for the way in that leads to a campaign
+var _level_select: LevelSelect = null
+
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -58,6 +61,7 @@ func _ready() -> void:
 	move_child(get_child(get_child_count() - 1), 0)
 
 	_build()
+	_build_level_select()
 	Seats.seats_changed.connect(_refresh)
 	InputIcons.device_changed.connect(_on_device_changed)
 	Input.joy_connection_changed.connect(_on_joy_changed)
@@ -70,12 +74,17 @@ func _input(event: InputEvent) -> void:
 	if _leaving:
 		return
 
+	if _level_select != null and _level_select.visible:
+		return
+
 	if event is InputEventJoypadButton and event.pressed:
 		match event.button_index:
 			JOY_BUTTON_A:
 				_join_pad(event.device)
 			JOY_BUTTON_B:
 				_leave_device(event.device)
+			JOY_BUTTON_Y:
+				_open_levels()
 			JOY_BUTTON_START:
 				_confirm()
 
@@ -88,10 +97,56 @@ func _input(event: InputEvent) -> void:
 				_join_keyboard()
 			KEY_ENTER, KEY_KP_ENTER:
 				_confirm()
+			KEY_L:
+				_open_levels()
 			KEY_ESCAPE:
 				_leave_keyboard()
 
 		get_viewport().set_input_as_handled()
+
+
+## The campaign picker, on the screen that fills the seats for one.
+##
+## It was always meant to be here — the scene was named at the top of this file
+## and the level to open at was already carried through to the start. What was
+## missing was the panel itself, so a room could only ever begin at the front of
+## the campaign
+func _build_level_select() -> void:
+	if next_mode != Mode.CAMPAIGN:
+		return
+
+	_level_select = load(LEVEL_SELECT_SCENE).instantiate() as LevelSelect
+	if _level_select == null:
+		return
+
+	_level_select.open_picks = SaveGame.best_unlocked_picks()
+	_level_select.open_levels = SaveGame.best_unlocked_levels()
+	_level_select.visible = false
+	_level_select.closed.connect(_on_levels_closed)
+	_level_select.level_picked.connect(_on_level_picked)
+	add_child(_level_select)
+
+
+## True while the room has anything to pick at all
+func _can_pick_levels() -> bool:
+	return _level_select != null and SaveGame.best_unlocked_picks() > 0
+
+
+func _open_levels() -> void:
+	if not _can_pick_levels():
+		return
+
+	_level_select.open()
+
+
+func _on_levels_closed() -> void:
+	_show_prompts()
+
+
+func _on_level_picked(index: int) -> void:
+	next_level = index
+	_level_select.close()
+	_refresh()
 
 
 func _join_pad(device: int) -> void:
@@ -217,6 +272,9 @@ func _show_prompts() -> void:
 
 	if ready:
 		_prompts.add_child(_prompt(JOY_BUTTON_START, KEY_ENTER, "START", OnlineUi.READY))
+
+	if _can_pick_levels():
+		_prompts.add_child(_prompt(JOY_BUTTON_Y, KEY_L, "LEVEL", OnlineUi.ACCENT))
 
 	_prompts.add_child(_prompt(JOY_BUTTON_A, KEY_SPACE, "JOIN", \
 		OnlineUi.ACCENT if not ready else OnlineUi.MUTED))
@@ -360,10 +418,13 @@ func _start_line() -> String:
 	if Seats.count() == 0:
 		return "nobody has sat down yet"
 
-	if Seats.count() == 1:
-		return "1 player ready"
+	var line := "1 player ready" if Seats.count() == 1 \
+		else "%d players ready" % Seats.count()
 
-	return "%d players ready" % Seats.count()
+	if next_mode == Mode.CAMPAIGN and next_level >= 0:
+		line += "  ·  starting at %s" % Levels.title_of(next_level)
+
+	return line
 
 
 ## Freezes the room, builds the per seat copies of every action, and hands over

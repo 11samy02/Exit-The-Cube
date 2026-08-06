@@ -109,13 +109,41 @@ func unlocked_levels() -> int:
 ## listed, so a player who has not come past them yet has nothing to pick and
 ## the selection is not worth opening
 func unlocked_picks() -> int:
+	return picks_under(unlocked_levels())
+
+
+## How many of the listed levels sit below that point in the campaign
+func picks_under(levels: int) -> int:
 	var open := 0
 
 	for level in Levels.selectable():
-		if level < unlocked_levels():
+		if level < levels:
 			open += 1
 
 	return open
+
+
+## How far the campaign has been played in any slot at all.
+##
+## The co-op campaign keeps its own continue point, which is right — a room
+## should not overwrite somebody's solo run. But it also meant a room sitting
+## down together started from nothing however far the player had already come,
+## and had no level selection to open. What one way of playing has cleared is
+## open to the other; only the continue point stays private to its slot
+func best_unlocked_levels() -> int:
+	var best := level_index
+
+	for other: int in _slots:
+		best = maxi(best, int((_slots[other] as Dictionary).get("level_index", -1)))
+
+	if best < 0:
+		return 0
+
+	return mini(best + 1, Levels.count())
+
+
+func best_unlocked_picks() -> int:
+	return picks_under(best_unlocked_levels())
 
 
 ## Writes the slot at that level, with the run as it stands right now

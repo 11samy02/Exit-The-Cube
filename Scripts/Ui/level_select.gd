@@ -14,6 +14,11 @@ signal closed
 ## at it
 signal level_picked(index: int)
 
+## How much of the campaign this panel is allowed to offer. -1 leaves it to the
+## slot that is being played, which is what the title screen wants
+var open_picks: int = -1
+var open_levels: int = -1
+
 ## Size of one pip in the campaign strip
 const PIP_SIZE := Vector2(20, 20)
 
@@ -283,7 +288,19 @@ func close() -> void:
 ## How many of the listed levels are open. They unlock from the front of the
 ## campaign, so the open ones are always the first slots
 func _open_count() -> int:
-	return mini(SaveGame.unlocked_picks(), _picks.size())
+	return mini(_picks_open(), _picks.size())
+
+
+## How many of the listed levels this panel may open, and how far up the
+## campaign that reaches. Left to the slot being played unless whoever opened
+## the panel said otherwise — the seat select does, because a room is allowed
+## everything either slot has already cleared
+func _picks_open() -> int:
+	return SaveGame.unlocked_picks() if open_picks < 0 else open_picks
+
+
+func _levels_open() -> int:
+	return SaveGame.unlocked_levels() if open_levels < 0 else open_levels
 
 
 ## The slot that level of the campaign is listed at. A campaign standing on a
@@ -355,7 +372,7 @@ func _build_strip() -> void:
 		pip.custom_minimum_size = pip_size
 		pip.focus_mode = Control.FOCUS_NONE
 		pip.tooltip_text = "%02d  %s" % [slot + 1, Levels.title_of(level)]
-		pip.disabled = level >= SaveGame.unlocked_levels()
+		pip.disabled = level >= _levels_open()
 		pip.pressed.connect(_jump_to.bind(slot))
 		_strip.add_child(pip)
 		_pips.append(pip)
