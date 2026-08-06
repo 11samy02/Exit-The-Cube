@@ -127,6 +127,14 @@ const MSG_ERASE := 9
 ## what it can do
 const MSG_STATUS := 10
 
+## Where one of the host's CPUs is and how its run is going, in one message.
+##
+## It names the cube it is about, because the sender is the host and not the
+## runner — which is also the only authority on it: a packet about a bot from
+## anybody but the lobby owner is dropped. It carries the whole runner rather
+## than splitting position from progress, since a bot has no input lag to hide
+const MSG_BOT := 11
+
 ## How often a cube tells the others where it is. Fifteen a second is enough for
 ## a ghost the interpolation smooths anyway, and it keeps twelve players inside
 ## a couple of kilobytes a second
@@ -326,8 +334,22 @@ func host_lobby() -> void:
 	if not steam.running:
 		return
 
-	settings = RaceRules.default_settings()
+	settings = default_rules()
 	steam.create_lobby(MAX_PLAYERS)
+
+
+## What a fresh lobby is set to: the rules of the round, and the two about the
+## CPUs a host may bring along to fill it out
+func default_rules() -> Dictionary:
+	var rules := RaceRules.default_settings()
+	rules[Bots.COUNT_KEY] = 0
+	rules[Bots.SKILL_KEY] = Bots.default_skill()
+	return rules
+
+
+## Every setting a lobby carries, which is what is written to it and read back
+func _rule_keys() -> Array:
+	return default_rules().keys()
 
 
 func join_lobby(lobby: int) -> void:
@@ -620,7 +642,7 @@ func _on_session_failed(reason: int, remote: int, state: int, message: String) -
 ## The four settings, read back off the lobby. The host wrote them, so this is
 ## also how the host's own copy is kept honest after a reconnect
 func _read_lobby_data() -> void:
-	for key: String in RaceRules.default_settings():
+	for key: String in _rule_keys():
 		var value := steam.lobby_data(lobby_id, key)
 		if not value.is_empty():
 			settings[key] = int(value)
@@ -714,7 +736,11 @@ func _enter_race() -> void:
 	for member in members:
 		accounts.append(int(member["id"]))
 
-	Match.start_online(settings, race_seed, accounts, steam.id, wire)
+	var bots := Bots.accounts_for(Bots.count_in_lobby(settings))
+	accounts.append_array(bots)
+
+	Match.start_online(settings, race_seed, accounts, steam.id, wire,
+		bots if is_host else [] as Array[int])
 
 	for member in members:
 		Match.session.runners[member["id"]]["name"] = member["name"]
@@ -739,6 +765,26 @@ func _send_local_state() -> void:
 		return
 
 	_broadcast([MSG_STATE, me["position"], me["yaw"], me["dead"]], false)
+	_send_bot_state()
+
+
+## The host's own CPUs, sent alongside its cube. Nobody else runs them, so if
+## this stops they stand still on every other screen in the race
+func _send_bot_state() -> void:
+	if not is_host:
+		return
+
+	for account in Match.local_accounts():
+		if not Bots.is_bot_account(account):
+			continue
+
+		var bot: Dictionary = Match.runners().get(account, {})
+		if bot.is_empty() or not bool(bot["placed"]):
+			continue
+
+		_broadcast([MSG_BOT, account, bot["position"], bot["yaw"], bot["dead"],
+			int(bot["deaths"]), int(bot["items"]), bool(bot["has_key"]),
+			bool(bot["finished"]), float(bot["time"])], false)
 
 
 ## The counters, sent whenever one of them moved and once a second regardless.
@@ -828,6 +874,37 @@ func push_status(account: int, effect: String, seconds: float) -> void:
 
 func push_hit(account: int) -> void:
 	_broadcast([MSG_HIT, account], true)
+
+
+## One of the host's CPUs, as the host last saw it. The packet names the cube
+## instead of the sender being it, so this is the one handler that has to check
+## who is talking
+func _handle_bot(sender: int, message: Array) -> void:
+	if message.size() < 10 or lobby_id == 0 or sender != steam.lobby_owner(lobby_id):
+		return
+
+	var account := int(message[1])
+	if not Bots.is_bot_account(account) or not Match.session.runners.has(account):
+		return
+
+	var bot: Dictionary = Match.session.runners[account]
+	bot["target"] = message[2] as Vector3
+	bot["target_yaw"] = float(message[3])
+	bot["dead"] = bool(message[4])
+	bot["deaths"] = int(message[5])
+	bot["items"] = int(message[6])
+	bot["has_key"] = bool(message[7])
+	bot["seen_at"] = _now()
+
+	if not bool(bot["placed"]):
+		bot["placed"] = true
+		bot["position"] = bot["target"]
+		bot["yaw"] = bot["target_yaw"]
+
+	if bool(message[8]) and not bool(bot["finished"]):
+		bot["finished"] = true
+		bot["time"] = float(message[9])
+		bot["has_key"] = true
 
 
 ## Somebody caught this cube with the cat. The kill happens here, on the machine
@@ -998,6 +1075,8 @@ func _handle(sender: int, message: Array) -> void:
 			_handle_erase(message)
 		MSG_STATUS:
 			_handle_status(message)
+		MSG_BOT:
+			_handle_bot(sender, message)
 
 
 ## Keeps the blade positions of every cube, so that whoever is watched can have
