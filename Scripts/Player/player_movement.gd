@@ -42,6 +42,35 @@ var _boosts: Dictionary = {}
 ## Gravity and collision keep running, only the input is ignored
 var input_enabled: bool = true
 
+## Upward speed the next step takes off with, spent the moment it is used.
+## Setting the velocity from outside does not work: a cube standing on the floor
+## has any upward speed flattened by the clamp below before it is ever moved
+var _launch: float = 0.0
+
+## Which seat drives this cube. Cached rather than looked up every frame, and it
+## is the base action again as soon as there is only one seat in the room
+var _seat: int = 0
+
+## True while something other than a person is steering, which is the one thing
+## that takes the input map out of the loop
+var driven: bool = false
+
+## Where that driver wants the cube to go, in world space. Its length is how much
+## of the top speed is being asked for, so a bot can walk rather than sprint
+var drive: Vector3 = Vector3.ZERO
+
+
+func _ready() -> void:
+	var cube := Player.of(self)
+	_seat = cube.seat
+	driven = cube.is_bot
+
+
+## Throws the cube upwards on the next step. Whatever asked for it decides how
+## hard, this only makes sure the floor does not eat it
+func launch(speed: float) -> void:
+	_launch = maxf(speed, 0.0)
+
 
 ## Puts that item's boost up. The same source setting it again replaces its own
 ## share, so an item that is picked up twice does not count twice
@@ -87,7 +116,10 @@ func _physics_process(delta: float) -> void:
 		body.velocity.x = move_toward(body.velocity.x, 0.0, friction * delta)
 		body.velocity.z = move_toward(body.velocity.z, 0.0, friction * delta)
 
-	if body.is_on_floor():
+	if _launch > 0.0:
+		body.velocity.y = _launch
+		_launch = 0.0
+	elif body.is_on_floor():
 		body.velocity.y = minf(body.velocity.y, 0.0)
 	else:
 		body.velocity.y -= gravity * delta
@@ -97,12 +129,18 @@ func _physics_process(delta: float) -> void:
 
 
 ## Reads WASD / left stick and turns it into a flat world direction
-## that points where the camera is looking
+## that points where the camera is looking. A driven cube has no camera to
+## follow and no seat in the input map, its direction is already a world one
 func _get_input_direction() -> Vector3:
 	if not input_enabled:
 		return Vector3.ZERO
 
-	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if driven:
+		return drive.limit_length(1.0)
+
+	var input := Input.get_vector(
+		Seats.action(_seat, &"move_left"), Seats.action(_seat, &"move_right"),
+		Seats.action(_seat, &"move_forward"), Seats.action(_seat, &"move_back"))
 	if input == Vector2.ZERO:
 		return Vector3.ZERO
 

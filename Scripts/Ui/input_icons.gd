@@ -235,6 +235,20 @@ var pad_device: int = Device.GENERIC
 ## on screen
 var active_device: int = Device.KEYBOARD
 
+## True once somebody has actually reached for a keyboard or a mouse.
+##
+## Until they have, a pad that is plugged in is what the prompts are drawn for.
+## The old rule was that the prompts only ever changed once a pad button had been
+## pressed, which is fine at a desk where the keyboard is the thing in front of
+## you — and wrong on a handheld, where the controls are part of the screen and
+## there is no keyboard to have used. It told a Steam Deck to press Enter
+var _used_keyboard: bool = false
+
+## What brand each connected pad is, by its joypad number. The single pad_device
+## above is still what a menu draws with — a menu is used by one person at a time
+## — but a split screen has a HUD per seat and each of them shows its own pad
+var _brand_by_device: Dictionary = {}
+
 var _cache: Dictionary = {}
 
 ## The dummy display server of a headless run cannot translate physical keys
@@ -257,6 +271,7 @@ func _input(event: InputEvent) -> void:
 		device = pad_device
 	elif event is InputEventKey or event is InputEventMouseButton:
 		device = Device.KEYBOARD
+		_used_keyboard = true
 	else:
 		return
 
@@ -266,10 +281,16 @@ func _input(event: InputEvent) -> void:
 
 
 ## The icon for that event, drawn in the style of whatever pad is plugged in.
-## Null when nothing fits, the caller falls back to the text
-func get_event_texture(event: InputEvent) -> Texture2D:
+## Null when nothing fits, the caller falls back to the text.
+##
+## A brand may be named instead, which is what a seat on a split screen does:
+## the binding is the one the options hold, only the pad it is drawn as belongs
+## to that seat
+func get_event_texture(event: InputEvent, brand: int = -1) -> Texture2D:
 	if event == null:
 		return null
+
+	var pad := pad_device if brand < 0 else brand
 
 	if event is InputEventKey:
 		var suffix: String = KEY_ICONS.get(_effective_keycode(event), "")
@@ -280,12 +301,12 @@ func get_event_texture(event: InputEvent) -> Texture2D:
 		return _texture(Device.KEYBOARD, mouse) if mouse != "" else null
 
 	if event is InputEventJoypadButton:
-		var table: Dictionary = JOY_BUTTONS.get(_glyph_device(), {})
+		var table: Dictionary = JOY_BUTTONS.get(_glyph_device(pad), {})
 		var button: String = table.get(event.button_index, "")
-		return _texture(pad_device, button) if button != "" else null
+		return _texture(pad, button) if button != "" else null
 
 	if event is InputEventJoypadMotion:
-		var axes: Dictionary = JOY_AXES.get(_glyph_device(), {})
+		var axes: Dictionary = JOY_AXES.get(_glyph_device(pad), {})
 		var pair: Array = axes.get(event.axis, [])
 		if pair.size() != 2:
 			return null
@@ -331,17 +352,23 @@ func prompt_slot() -> int:
 func _refresh_pad() -> void:
 	var detected := Device.GENERIC
 	var pads := Input.get_connected_joypads()
+
+	_brand_by_device.clear()
+	for pad: int in pads:
+		_brand_by_device[pad] = _detect(Input.get_joy_name(pad))
+
 	if not pads.is_empty():
-		detected = _detect(Input.get_joy_name(pads[0]))
+		detected = int(_brand_by_device[pads[0]])
 
-	if detected == pad_device:
-		return
-
+	var was_active := active_device
+	var was_pad := pad_device
 	pad_device = detected
-	if active_device != Device.KEYBOARD:
+
+	if active_device != Device.KEYBOARD or (not _used_keyboard and not pads.is_empty()):
 		active_device = pad_device
 
-	device_changed.emit(active_device)
+	if active_device != was_active or pad_device != was_pad:
+		device_changed.emit(active_device)
 
 
 func _on_joy_connection_changed(_device: int, _connected: bool) -> void:
@@ -350,17 +377,63 @@ func _on_joy_connection_changed(_device: int, _connected: bool) -> void:
 
 func _detect(joy_name: String) -> int:
 	var lowered := joy_name.to_lower()
+	var found := Device.GENERIC
+
 	for entry in DEVICE_KEYWORDS:
 		if lowered.contains(entry[0]):
-			return entry[1]
+			found = entry[1]
+			break
 
-	return Device.GENERIC
+	return Device.STEAM_DECK if _handheld_glyphs(found) else found
+
+
+## True while the pad that was found should be drawn as the handheld's own.
+##
+## Steam hands a game its controls through a virtual pad, and that pad does not
+## say "Steam Deck" — it reports itself as an Xbox 360 controller, which is the
+## layout every game already understands. So the machine is what has to be asked
+## rather than the driver: on a Deck, a pad that came through as generic or as an
+## Xbox one is the Deck itself and gets its own glyphs.
+##
+## A PlayStation or a Switch pad is left alone. Those names survive the trip, so
+## a pad somebody actually plugged in is still drawn as what it is
+func _handheld_glyphs(found: int) -> bool:
+	if found != Device.GENERIC and found != Device.XBOX:
+		return false
+
+	return OS.get_environment("SteamDeck") == "1"
 
 
 ## An unknown pad borrows the Xbox glyph names, its own folder holds no face
 ## buttons to tell A from B
-func _glyph_device() -> int:
-	return Device.XBOX if pad_device == Device.GENERIC else pad_device
+func _glyph_device(pad: int = -1) -> int:
+	var brand := pad_device if pad < 0 else pad
+	return Device.XBOX if brand == Device.GENERIC else brand
+
+
+## What brand that joypad is, for a HUD that has to draw one pad rather than
+## whichever one the menus last saw
+func brand_of_device(device: int) -> int:
+	return int(_brand_by_device.get(device, Device.GENERIC))
+
+
+## The name the driver reports for that pad, so a seat card can say which one it
+## just took rather than only that it took one
+func name_of_device(device: int) -> String:
+	return Input.get_joy_name(device) if device >= 0 else "Keyboard"
+
+
+## The glyph that seat should show for an action. The binding is read off the
+## base action, so the options stay the one place a binding lives, and only the
+## brand is that seat's own
+func get_seat_action_texture(seat: int, base: StringName) -> Texture2D:
+	var slot := Seats.slot_of(seat)
+	var event := Settings.get_binding(base, slot)
+
+	if slot == Settings.SLOT_KEYBOARD:
+		return get_event_texture(event)
+
+	return get_event_texture(event, brand_of_device(Seats.device_of(seat)))
 
 
 ## Bindings are stored on the physical key so the layout does not matter for

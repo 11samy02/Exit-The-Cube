@@ -16,6 +16,8 @@
 [ext_resource type="PackedScene" path="res://Scenes/Player/screen_shake.tscn" id="14_shake"]
 [ext_resource type="Script" uid="uid://cep8jgjufh6pq" path="res://Scripts/Player/player_spawn.gd" id="15_spawn"]
 [ext_resource type="AudioStream" uid="uid://dm54ixoud8jkt" path="res://Assets/Sounds/Power Up.wav" id="16_spawnsfx"]
+[ext_resource type="Script" path="res://Scripts/Player/player.gd" id="17_player"]
+[ext_resource type="Script" path="res://Scripts/Items/player_inventory.gd" id="18_inventory"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sewcp"]
 
@@ -51,8 +53,9 @@ _surfaces = [{
 blend_shape_mode = 0
 shadow_mesh = SubResource("ArrayMesh_8shik")
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_srb8v"]
-size = Vector3(1.2, 1.2, 1.2)
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_body"]
+height = 1.2
+radius = 0.56
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_cam"]
 radius = 0.25
@@ -197,6 +200,7 @@ material = SubResource("StandardMaterial3D_dust")
 size = Vector3(0.12, 0.12, 0.12)
 
 [node name="player" type="CharacterBody3D" unique_id=63181298 groups=["player"]]
+script = ExtResource("17_player")
 
 [node name="Scripts" type="Node" parent="." unique_id=268413166]
 
@@ -263,11 +267,14 @@ spawn_sound = NodePath("../../SpawnSound")
 camera_rig = NodePath("../Camera")
 screen_shake = NodePath("../../ScreenShake")
 
+[node name="Inventory" type="Node" parent="Scripts"]
+script = ExtResource("18_inventory")
+
 [node name="mesh" type="MeshInstance3D" parent="." unique_id=1582573964]
 mesh = SubResource("ArrayMesh_k13sg")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1969206868]
-shape = SubResource("BoxShape3D_srb8v")
+shape = SubResource("CylinderShape3D_body")
 
 [node name="Camera Pivot" type="Node3D" parent="." unique_id=1969206869]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)

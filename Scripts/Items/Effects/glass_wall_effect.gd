@@ -10,10 +10,6 @@ class_name GlassWallEffect
 ## is the whole trade: the shortcut and the ride onto the roof of the maze are
 ## the same item, and both of them run on the same clock.
 
-## How brightly the screen edge glows while the panes are down, seen from inside
-## the cube where the level itself is the only thing that shows the effect
-@export var vignette_strength: float = 0.7
-
 ## The panes this effect dropped, and only those. One that was already down is
 ## not this item's to bring back up
 var lowered: Array[GlassWall] = []
@@ -25,10 +21,12 @@ func _start() -> void:
 		if wall == null or wall.is_open:
 			continue
 
+		if wall.seat >= 0 and wall.seat != seat:
+			continue
+
 		wall.open()
 		lowered.append(wall)
 
-	show_vignette(vignette_strength)
 
 
 func _stop(_cancelled: bool) -> void:

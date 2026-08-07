@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="RaceMode" format=3 uid="uid://bious32f7gnf2"]
+
+[ext_resource type="Script" uid="uid://bbuw25rvtk03n" path="res://Scripts/Online/Rules/race_mode.gd" id="1_b1ryw"]
+
+[resource]
+script = ExtResource("1_b1ryw")
+id = "paint"
+label = "PAINT"
+blurb = "teams, a clock, and a floor that remembers who walked on it"
+with_exit = false
+paints_floor = true
+restock_items = true
+item_pool = Array[String](["eraser", "glass_opener", "leap", "rush", "saw_paths", "shield", "shock", "splash", "speed"])
+round_seconds = 300.0
+death_tile_penalty = 10
+death_penalty_seconds = 5.0
+saw_revive_seconds = 20.0

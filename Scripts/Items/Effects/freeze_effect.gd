@@ -16,7 +16,7 @@ var held: Array[SawMover] = []
 func _start() -> void:
 	for node in get_tree().get_nodes_in_group("saw_mover"):
 		var mover := node as SawMover
-		if mover != null:
+		if mover != null and (mover.seat < 0 or mover.seat == seat):
 			held.append(mover)
 
 	_hold()

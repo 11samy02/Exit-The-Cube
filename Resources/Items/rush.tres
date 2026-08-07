@@ -10,7 +10,7 @@
 script = ExtResource("1_data")
 display_name = "Katze"
 icon = ExtResource("2_icon")
-duration = 6.0
+duration = 8.0
 accent_color = Color(1, 0.25, 0.85, 1)
 effect_scene = ExtResource("3_effect")
 weight = 0.6

@@ -11,6 +11,14 @@ const PATH_SHADER := "res://Assets/shaders/SawPath.gdshader"
 ## Corners per tube ring, six already reads as round at debug thickness
 const PATH_TUBE_SIDES := 6
 
+## Which seat this blade belongs to, -1 while it is everybody's.
+##
+## A local race sets one set of blades per player into the same corridors. They
+## run the identical routes, so the maze plays the same for all of them — but
+## the freeze that stops them, the route the map item draws on them and the
+## shield that breaks one are then that player's own and nobody else's
+var seat: int = -1
+
 ## The Area3D that actually gets moved along the patrol route
 @export var parent: Area3D
 
@@ -252,20 +260,93 @@ func _current_speed(distance_to_target: float) -> float:
 ## Brakes into the end of the route and accelerates back out of it. A looping
 ## saw never turns around, so it keeps its speed all the way
 func _route_speed(distance_to_target: float) -> float:
+	return route_speed_at(target_index, direction, parent.global_position, distance_to_target)
+
+
+## The same, for a blade that is only being imagined. Everything the ramp depends
+## on is handed in rather than read off this node, so a forecast can ask what the
+## speed would be at a waypoint the saw has not reached yet
+func route_speed_at(index: int, way: int, at: Vector3, distance_to_target: float) -> float:
 	if behavior != Behavior.PING_PONG or turn_slowdown_distance <= 0.0:
 		return speed
 
 	var ramp := 1.0
 
-	if _is_end_of_route(target_index):
+	if _is_end_of_route(index):
 		ramp = minf(ramp, distance_to_target / turn_slowdown_distance)
 
-	var origin_index := target_index - direction
+	var origin_index := index - way
 	if _is_end_of_route(origin_index):
-		var travelled := parent.global_position.distance_to(waypoints[origin_index])
+		var travelled := at.distance_to(waypoints[origin_index])
 		ramp = minf(ramp, travelled / turn_slowdown_distance)
 
 	return speed * maxf(ramp, turn_min_speed_factor)
+
+
+## Where this blade will be after each of those steps, if nothing new touches it.
+##
+## The same walk _process does, run forward on a copy of the state instead of on
+## the saw itself. Whatever plans around these blades used to keep a second,
+## simpler version of it, and every difference between the two was a corridor
+## read wrong: the rest at each end of a patrol, the way the speed eases off into
+## a turn and back out of it, the glide out of a freeze. None of those are small
+## against a cube that crosses a cell in a third of a second — a blade resting out
+## its turn is a blade that is still there when the plan has it long gone.
+##
+## A route that is walked once and not repeated ends the forecast rather than
+## parking the blade at its last waypoint: what happens after is a fresh route
+## nobody has been given yet, and saying nothing is the honest answer
+func forecast(step: float, count: int) -> PackedVector3Array:
+	var spots := PackedVector3Array()
+	if parent == null or step <= 0.0 or count <= 0:
+		return spots
+
+	var at: Vector3 = parent.global_position
+	var index := clampi(target_index, 0, maxi(waypoints.size() - 1, 0))
+	var way := direction if direction != 0 else 1
+	var rest := pause_timer
+	var held := stall_time
+	var ease := stall_factor
+
+	for _at in range(count):
+		held = maxf(held - step, 0.0)
+		var wanted := 0.0 if held > 0.0 else 1.0
+		ease = move_toward(ease, wanted, (brake_rate if wanted < ease else resume_rate) * step)
+
+		if waypoints.size() < 2:
+			spots.append(at)
+			continue
+
+		if rest > 0.0:
+			rest -= step
+			spots.append(at)
+			continue
+
+		var goal: Vector3 = waypoints[index]
+		var leg := goal - at
+		var gap := leg.length()
+		var travel := route_speed_at(index, way, at, gap) \
+			* smoothstep(0.0, 1.0, ease) * speed_multiplier * step
+
+		if gap <= travel or gap < 0.05:
+			at = goal
+
+			if behavior == Behavior.PING_PONG and _is_end_of_route(index):
+				rest = turn_pause
+
+			var onwards := step_target(index, way)
+			if onwards.x < 0:
+				spots.append(at)
+				break
+
+			index = onwards.x
+			way = onwards.y
+		elif travel > 0.0:
+			at += leg / gap * travel
+
+		spots.append(at)
+
+	return spots
 
 
 func _is_end_of_route(index: int) -> bool:
@@ -276,26 +357,40 @@ func _is_end_of_route(index: int) -> bool:
 ## says so through route_done rather than turning around. Whatever steers it
 ## reads that flag and hands it the next leg
 func _advance_target() -> void:
-	match behavior:
-		Behavior.PING_PONG:
-			target_index += direction
-			if target_index >= waypoints.size():
-				target_index = waypoints.size() - 2
-				direction = -1
-			elif target_index < 0:
-				target_index = 1
-				direction = 1
-		Behavior.LOOP:
-			target_index = (target_index + 1) % waypoints.size()
-		Behavior.ONCE:
-			if target_index >= waypoints.size() - 1:
-				route_done = true
-				return
+	var onwards := step_target(target_index, direction)
 
-			target_index += 1
+	if onwards.x < 0:
+		route_done = true
+		return
+
+	target_index = onwards.x
+	direction = onwards.y
 
 	if route_material != null:
 		_update_path_materials()
+
+
+## Which waypoint the route heads for after that one, and which way it is being
+## walked from there. An x of -1 means the route is over, which only a ONCE one
+## ever answers.
+##
+## Pulled out of the advancing itself so that a forecast turns a patrol around at
+## its ends and wraps a loop by the very same rule the saw does, rather than by a
+## second copy of that rule which is one edit away from disagreeing
+func step_target(index: int, way: int) -> Vector2i:
+	match behavior:
+		Behavior.PING_PONG:
+			var next := index + way
+			if next >= waypoints.size():
+				return Vector2i(waypoints.size() - 2, -1)
+			if next < 0:
+				return Vector2i(1, 1)
+
+			return Vector2i(next, way)
+		Behavior.LOOP:
+			return Vector2i((index + 1) % waypoints.size(), way)
+
+	return Vector2i(-1, way) if index >= waypoints.size() - 1 else Vector2i(index + 1, way)
 
 
 ## Called on every change that the drawn route depends on, the exported flag

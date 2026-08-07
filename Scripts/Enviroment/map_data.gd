@@ -75,6 +75,11 @@ class_name MapData
 ## Height the player is dropped in at, from there it falls onto the floor
 @export var player_spawn_height: float = 3.0
 
+## Whether the level has a key and a way out at all. A mode that is not about
+## reaching an exit wants neither: the key would be a pickup that does nothing
+## and the elevator would carry a player out of a round that is still running
+@export var with_exit: bool = true
+
 @export_group("Key")
 
 ## How many candidate cells to store, only one is used per spawn
@@ -153,6 +158,10 @@ class_name MapData
 
 ## Minimum number of cells between a sphere and the player start
 @export var item_min_distance_to_player: int = 1
+
+## Whether spheres are put back as they are taken. A level that is played to an
+## exit is laid out once; one that runs to a clock is picked clean without this
+@export var restock_items: bool = false
 
 @export_group("Seeds")
 

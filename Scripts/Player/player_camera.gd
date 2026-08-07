@@ -46,6 +46,28 @@ class_name PlayerCamera
 ## it, keeps a view that is already fine from being nudged around
 @export var clearance_tolerance: float = 0.4
 
+## Degrees per second the view swings around while something other than a person
+## is turning it. Well under what a hand can do: a camera that snapped onto every
+## change of mind would read as a machine driving rather than somebody playing
+@export var drive_turn_speed: float = 90.0
+
+## The angle a driven view settles at, and how fast it eases onto it.
+##
+## A person looking through this cube left the pitch wherever their last flick of
+## the mouse put it, which is fine while they are the one deciding what to look
+## at. Handed to a CPU it is nobody's choice at all — the view is simply stuck at
+## whatever angle the run happened to end on, and a level watched from the
+## floorboards or from straight overhead is a level you cannot read. So a driven
+## view walks onto one angle and holds it, and the whole of what moves after that
+## is the cube and the corridor it is in
+@export var drive_pitch: float = -18.0
+@export var drive_pitch_speed: float = 35.0
+
+## True while something other than a person turns this view, which is a cube the
+## game took over. The mouse and the stick are ignored for as long — two of them
+## steering one camera is a picture that shakes rather than a CPU to watch
+var driven: bool = false
+
 ## Distance the camera keeps when nothing is in the way, set by the perspective
 var desired_distance: float = 0.0
 
@@ -53,19 +75,58 @@ var yaw: float = 0.0
 var pitch: float = -12.0
 var clearance: float = 0.0
 
+## Bodies the wall probe walks straight through: this cube, and on a split
+## screen every other one. A second player standing behind the first would
+## otherwise be read as a wall and pull the view in against them
+var _ignored: Array[RID] = []
+
+
+## Which seat drives this cube. Cached rather than looked up every frame, and it
+## is the base action again as soon as there is only one seat in the room
+var _seat: int = 0
+
+## True on a cube nobody is looking through, which is every bot in the round
+var _idle: bool = false
+
 
 func _ready() -> void:
+	var cube := Player.of(self)
+	_seat = cube.seat
+	_ignored = [body.get_rid()]
 	spring_arm.add_excluded_object(body.get_rid())
 	yaw = rad_to_deg(pivot.global_rotation.y)
 	desired_distance = spring_arm.spring_length
 	clearance = spring_arm.spring_length
 	process_physics_priority = 10
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+	if cube.is_bot:
+		_stand_down()
+		return
+
+	if Seats.uses_mouse(_seat) or Seats.count() <= 1:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
 	_apply_rotation()
 
 
+## Takes the rig out of the loop on a cube nobody is looking through. The wall
+## probe is what this is really about: eleven bots feeling their way around the
+## corridors is seventy shape casts a frame for a view nothing draws
+func _stand_down() -> void:
+	_idle = true
+	camera.current = false
+	set_process(false)
+	set_physics_process(false)
+	set_process_unhandled_input(false)
+
+
 func _process(delta: float) -> void:
-	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
+	if driven:
+		return
+
+	var look := Input.get_vector(
+		Seats.action(_seat, &"look_left"), Seats.action(_seat, &"look_right"),
+		Seats.action(_seat, &"look_up"), Seats.action(_seat, &"look_down"))
 	if look == Vector2.ZERO:
 		return
 
@@ -80,11 +141,26 @@ func _physics_process(delta: float) -> void:
 	_update_distance(delta)
 
 
+## Another cube this camera must not be pushed in by. Called by the spawner once
+## every seat is in the level, so each rig knows about all the others
+func ignore(other: CollisionObject3D) -> void:
+	var rid := other.get_rid()
+
+	if _ignored.has(rid):
+		return
+
+	_ignored.append(rid)
+	spring_arm.add_excluded_object(rid)
+
+
 ## Turns the camera to whichever side of the player has the most room and puts
 ## it out there right away. A cube dropped into a corner would otherwise start
 ## the level with the view squeezed against a wall. Nearby directions are tried
 ## first, so a spot that is already open keeps the angle it had
 func aim_at_clearest() -> void:
+	if _idle:
+		return
+
 	var space := body.get_world_3d().direct_space_state
 	var best_yaw := yaw
 	var best_room := _room_behind(space, yaw)
@@ -116,7 +192,7 @@ func _room_behind(space: PhysicsDirectSpaceState3D, candidate_yaw: float) -> flo
 	query.shape = spring_arm.shape
 	query.transform = Transform3D(Basis(), pivot.global_position)
 	query.motion = direction * reach
-	query.exclude = [body.get_rid()]
+	query.exclude = _ignored
 
 	var travel: PackedFloat32Array = space.cast_motion(query)
 	if travel.is_empty():
@@ -125,13 +201,42 @@ func _room_behind(space: PhysicsDirectSpaceState3D, candidate_yaw: float) -> flo
 	return maxf(reach * travel[0] - spring_arm.margin, 0.0)
 
 
+## Turns the view to look along that heading, a little at a time.
+##
+## What something driving this cube calls instead of moving the mouse. The yaw is
+## walked towards where the cube is going rather than snapped onto it, so a corner
+## reads as somebody turning the camera into it; the pitch is walked onto the one
+## angle a driven view holds and then left there. A heading of nothing at all is a
+## cube standing still, and the view stays exactly where it was for it — settling
+## the pitch is the only thing that carries on
+func look_along(heading: Vector3, delta: float) -> void:
+	if not driven or _idle:
+		return
+
+	pitch = move_toward(pitch, drive_pitch, drive_pitch_speed * delta)
+
+	if heading.length_squared() >= 0.0001:
+		var wanted := rad_to_deg(atan2(-heading.x, -heading.z))
+		var turn := wrapf(wanted - yaw, -180.0, 180.0)
+		var step := drive_turn_speed * delta
+		yaw += clampf(turn, -step, step)
+
+	_apply_rotation()
+
+
+## Only the seat holding the mouse is turned by it. Without that the one mouse
+## on the desk would swing all four cameras at once
 func _unhandled_input(event: InputEvent) -> void:
+	if driven or (Seats.count() > 1 and not Seats.uses_mouse(_seat)):
+		return
+
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var step := mouse_sensitivity * Settings.mouse_sensitivity
 		yaw -= event.relative.x * step
 		pitch -= event.relative.y * step
 		_apply_rotation()
-	elif event is InputEventMouseButton and event.pressed:
+	elif event is InputEventMouseButton and event.pressed \
+			and not Match.showing_results(Player.of(self).account()):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -158,12 +263,11 @@ func _free_distance() -> float:
 	var space := body.get_world_3d().direct_space_state
 	var direction := pivot.global_transform.basis.z
 	var steps := maxi(probe_steps, 2)
-	var ignore: Array[RID] = [body.get_rid()]
 
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = spring_arm.shape
 	query.margin = spring_arm.margin
-	query.exclude = ignore
+	query.exclude = _ignored
 
 	for i in range(steps):
 		var distance := lerpf(desired_distance, min_probe_distance, float(i) / float(steps - 1))

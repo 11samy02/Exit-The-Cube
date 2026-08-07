@@ -93,6 +93,7 @@ func _send_ring() -> void:
 	ring.fade_distance = fade_distance
 	ring.top_level = true
 	holder.add_child(ring)
+	claim(ring)
 	ring.launch(_route, ring_speed, ring_color, ring_size, ring_glow)
 
 

@@ -1,0 +1,173 @@
+[gd_scene format=3 uid="uid://ce2mmal837qsq"]
+
+[ext_resource type="Script" uid="uid://soyra2nc5kpt" path="res://Scripts/Ui/autopilot_offer.gd" id="1_offer"]
+[ext_resource type="Theme" uid="uid://054p11jwh4no" path="res://Assets/Themes/menu_theme.tres" id="2_theme"]
+[ext_resource type="FontFile" uid="uid://hx07oyjr0bm1" path="res://Assets/Fonts/Orbitron-Variable.ttf" id="3_orbitron"]
+
+[sub_resource type="FontVariation" id="FontVariation_title"]
+base_font = ExtResource("3_orbitron")
+variation_opentype = {
+2003265652: 800
+}
+spacing_glyph = 8
+
+[sub_resource type="LabelSettings" id="LabelSettings_title"]
+font = SubResource("FontVariation_title")
+font_size = 44
+outline_size = 6
+outline_color = Color(0.353, 0.125, 0.851, 0.75)
+shadow_size = 18
+shadow_color = Color(0.051, 0.749, 1, 0.4)
+
+[sub_resource type="LabelSettings" id="LabelSettings_question"]
+font_size = 24
+font_color = Color(0.129, 0.855, 1, 1)
+shadow_size = 10
+shadow_color = Color(0.051, 0.749, 1, 0.3)
+
+[sub_resource type="LabelSettings" id="LabelSettings_badge"]
+font = SubResource("FontVariation_title")
+font_size = 18
+font_color = Color(0.129, 0.855, 1, 0.85)
+outline_size = 4
+outline_color = Color(0.016, 0.004, 0.043, 0.8)
+shadow_size = 10
+shadow_color = Color(0.051, 0.749, 1, 0.35)
+
+[sub_resource type="LabelSettings" id="LabelSettings_hint"]
+font_size = 15
+font_color = Color(0.686, 0.647, 0.855, 0.8)
+outline_size = 4
+outline_color = Color(0.016, 0.004, 0.043, 0.8)
+
+[node name="AutopilotOffer" type="CanvasLayer" unique_id=1961932443]
+layer = 70
+script = ExtResource("1_offer")
+offer_at_deaths = Array[int]([10, 25, 100])
+
+[node name="Root" type="Control" parent="." unique_id=1677757786]
+unique_name_in_owner = true
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+
+[node name="Dim" type="ColorRect" parent="Root" unique_id=905152020]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.016, 0.004, 0.043, 0.78)
+
+[node name="Center" type="CenterContainer" parent="Root" unique_id=290816535]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="Root/Center" unique_id=954977586]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Layout" type="VBoxContainer" parent="Root/Center/Panel" unique_id=234224892]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="Root/Center/Panel/Layout" unique_id=1284944960]
+unique_name_in_owner = true
+layout_mode = 2
+text = "STUCK?"
+label_settings = SubResource("LabelSettings_title")
+horizontal_alignment = 1
+
+[node name="Question" type="Label" parent="Root/Center/Panel/Layout" unique_id=1474082164]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(520, 66)
+layout_mode = 2
+text = "DO YOU WANT ME TO FINISH THE LEVEL?"
+label_settings = SubResource("LabelSettings_question")
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="Gap" type="Control" parent="Root/Center/Panel/Layout" unique_id=14034585]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="YesButton" type="Button" parent="Root/Center/Panel/Layout" unique_id=845791676]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 62)
+layout_mode = 2
+text = "YES, TAKE OVER"
+
+[node name="NoButton" type="Button" parent="Root/Center/Panel/Layout" unique_id=831105681]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 62)
+layout_mode = 2
+text = "NO, I'LL DO IT"
+
+[node name="Badge" type="VBoxContainer" parent="." unique_id=1728159124]
+unique_name_in_owner = true
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -152.0
+offset_bottom = -56.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="BadgeTitle" type="Label" parent="Badge" unique_id=1728159125]
+layout_mode = 2
+text = "CPU IS PLAYING THIS ONE"
+label_settings = SubResource("LabelSettings_badge")
+horizontal_alignment = 1
+
+[node name="BadgeHint" type="HBoxContainer" parent="Badge" unique_id=1728159126]
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="TakeIcon" type="TextureRect" parent="Badge/BadgeHint" unique_id=1728159127]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(34, 34)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="TakeText" type="Label" parent="Badge/BadgeHint" unique_id=1728159128]
+unique_name_in_owner = true
+layout_mode = 2
+text = "TAKE BACK OVER"
+label_settings = SubResource("LabelSettings_hint")
+
+[node name="HintGap" type="Control" parent="Badge/BadgeHint" unique_id=1728159129]
+custom_minimum_size = Vector2(44, 0)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="FastIcon" type="TextureRect" parent="Badge/BadgeHint" unique_id=1728159130]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(34, 34)
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+
+[node name="FastText" type="Label" parent="Badge/BadgeHint" unique_id=1728159131]
+unique_name_in_owner = true
+layout_mode = 2
+text = "HOLD FOR FAST"
+label_settings = SubResource("LabelSettings_hint")

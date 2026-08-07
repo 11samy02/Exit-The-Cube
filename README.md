@@ -102,6 +102,85 @@ The map scene never changes — only the resource it builds from.
 
 ---
 
+## Online — the race
+
+<p align="center">
+  <i>Twelve cubes. One maze. Whoever bled least gets the top of the board.</i>
+</p>
+
+**ONLINE** on the title screen asks one question — host or join — and drops you into a Steam
+lobby that holds **up to 12 players**. Everybody in it is listed by their Steam name in the
+colour their ghost will run around in, with a ready light beside them. The host picks the
+rules, everyone else readies up, and the start button only lights when the room is green.
+
+| The host picks | Options |
+|---|---|
+| **Mode** | Race — first one out of the maze wins |
+| **Size** | Very small `16²`, small `24²`, medium `32²`, large `48²`, very large `64²`, gigantic `96²` |
+| **Shape** | Square or round |
+| **Difficulty** | Stroll, Easy, Normal, Hard, Nightmare |
+
+Size, shape and difficulty can each be set to **RANDOM**, or all three at once with **SURPRISE
+US**. The roll happens when the race starts, off the same seed the maze is built from, so the
+whole room finds out together and nobody has to be told. A random roll never lands on
+*gigantic* or *nightmare* — those are things you choose on purpose or not at all.
+
+Difficulty is not a multiplier on one number — it moves the whole level. The corridors stop
+looping, the blades get closer together and faster, hunting blades appear, the item spheres get
+rarer, and the hard settings put a **roof over the whole maze** so it cannot be read from above.
+
+**Every combination is meant to be finishable, and every one of them is meant to mean
+something** — which is why difficulty is written relative to the map rather than as a fixed
+table. Blade speeds are a share of the cube's own speed, so nothing on the list is quick enough
+to be unavoidable on a map with no room to dodge. Blades are spaced by *corridor* rather than
+counted by area, so a small map stops being the densest one on the list without also being
+emptied out. Small mazes are given just enough loops to break a chase in, because a dead end
+with a faster blade coming down it is not a hard corner — but not so many that a nightmare
+turns into a car park. Every size keeps its hunting blades. Long maps get their blade pressure
+eased instead: four times the maze is four times as many corners to survive, even when each one
+is fair on its own.
+
+**Nothing about the maze is sent over the network.** The host rolls one seed, every machine
+builds the identical level out of it, and the maze is only rebuilt for a *new* race — a death
+puts you back into the same one. That is what makes a gigantic map possible at all: the only
+traffic is a position per cube and a handful of counters.
+
+**The others are in there with you.** Every player shows up in your maze as a transparent
+glowing cube with their name over it, walking the corridors exactly where they are walking
+them on their own machine.
+
+**The board** ranks on three things, in this order:
+
+1. **Fewest deaths**
+2. **Fastest time**
+3. **Most item spheres collected**
+
+Two runs that match on all three **share the place** — two firsts and no second. Anyone still
+in the maze is listed under everyone who got out.
+
+**Once you are out, you can watch.** The results panel has a spectate button: the camera drops
+in behind anybody still running and you can step through them. Their maze is your maze, so
+there is nothing to load.
+
+### Setting it up
+
+The online side needs the **GodotSteam** GDExtension in `addons/godotsteam/` (already in the
+repo) and a running Steam client. The app id is read from **`steam_appid.txt`** in the project
+root — it ships as `480` (Valve's *Spacewar* test app) so the lobby code works from the editor
+without owning a store page. Put your own app id in that file before you ship.
+
+Without Steam nothing breaks: the extension missing, the client shut or the file gone all end
+up on the same screen telling you why, and every other part of the game is untouched.
+
+**Steam is not started until you press ONLINE.** Bringing the API up loads Steam's overlay into
+the process, and the overlay hooks the input APIs on its way in — on a build started *outside*
+Steam that hook has been seen to swallow controller input completely, with the pad still
+enumerated and still reporting its name. Keeping it switched off until the online button is
+pressed means the campaign is never near it. If a pad stops answering after you have been in a
+lobby, turn off **Steam → Settings → In Game → Enable the Steam Overlay** and try again.
+
+---
+
 ## Controls
 
 | | Keyboard | Gamepad |
@@ -180,4 +259,3 @@ Per-asset provenance and licence notes live next to the assets themselves, in
 `Assets/Sounds/SOURCES.md`, `Assets/Fonts/SOURCES.md` and
 `Assets/Ui/InputPrompts/SOURCES.md`.
 
-**Known bugs:** nah its not a bug, its actually only me.

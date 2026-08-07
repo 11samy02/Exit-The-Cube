@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3 uid="uid://bpgamcu74q5lh"]
+
+[ext_resource type="Script" uid="uid://bsnatoh5lqagf" path="res://Scripts/Items/item_data.gd" id="1_data"]
+[ext_resource type="Texture2D" uid="uid://bfodlfaa1bxye" path="res://Assets/Ui/splash_icon.svg" id="2_5pk35"]
+[ext_resource type="PackedScene" path="res://Scenes/Items/splash_effect.tscn" id="3_effect"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "Klecks"
+icon = ExtResource("2_5pk35")
+duration = 0.6
+accent_color = Color(0.9, 0.35, 1, 1)
+effect_scene = ExtResource("3_effect")
+max_in_a_row = 1

@@ -60,7 +60,7 @@ var bob_time: float = 0.0
 ## The arrow is placed by hand every frame, so it hangs outside of the player
 ## transform instead of being dragged around by it
 func _start() -> void:
-	perspective = get_tree().get_first_node_in_group("player_perspective") as PlayerPerspective
+	perspective = player.perspective if player != null else null
 	if perspective != null:
 		camera = perspective.camera
 

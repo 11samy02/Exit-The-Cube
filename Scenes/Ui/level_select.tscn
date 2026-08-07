@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://Scripts/Ui/level_select.gd" id="1_select"]
 [ext_resource type="FontFile" uid="uid://hx07oyjr0bm1" path="res://Assets/Fonts/Orbitron-Variable.ttf" id="2_orbitron"]
@@ -25,6 +25,38 @@ font_color = Color(0.95, 0.94, 1, 1)
 font = ExtResource("3_body")
 font_size = 24
 font_color = Color(0.35, 0.95, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_help"]
+content_margin_left = 18.0
+content_margin_top = 5.0
+content_margin_right = 18.0
+content_margin_bottom = 5.0
+bg_color = Color(0.18, 0.075, 0.02, 0.85)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.55, 0.3, 0.9)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="FontVariation" id="FontVariation_help"]
+base_font = ExtResource("2_orbitron")
+variation_opentype = {
+2003265652: 800
+}
+spacing_glyph = 3
+
+[sub_resource type="LabelSettings" id="LabelSettings_help"]
+font = SubResource("FontVariation_help")
+font_size = 21
+font_color = Color(1, 0.68, 0.42, 1)
+outline_size = 4
+outline_color = Color(0.14, 0.04, 0, 0.9)
+shadow_size = 12
+shadow_color = Color(1, 0.5, 0.2, 0.5)
 
 [sub_resource type="LabelSettings" id="LabelSettings_side_number"]
 font = ExtResource("2_orbitron")
@@ -204,6 +236,18 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "NEXT UP"
 label_settings = SubResource("LabelSettings_state")
+horizontal_alignment = 1
+
+[node name="HelpMark" type="PanelContainer" parent="Center/Panel/Column/Carousel/MainCard/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_help")
+
+[node name="HelpText" type="Label" parent="Center/Panel/Column/Carousel/MainCard/Stack/HelpMark"]
+layout_mode = 2
+text = "CLEARED BY CPU"
+label_settings = SubResource("LabelSettings_help")
 horizontal_alignment = 1
 
 [node name="NextCard" type="Button" parent="Center/Panel/Column/Carousel"]

@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="BotSkill" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Bots/bot_skill.gd" id="1_botsk"]
+
+[resource]
+script = ExtResource("1_botsk")
+label = "MASTER"
+blurb = "knows every blade in the maze, and does not intend to lose"
+think_interval = 0.18
+reaction_time = 0.03
+pace = 1.0
+mistake_chance = 0.0
+foresight = 200
+danger = 2
+danger_range = 4.6
+danger_lookahead = 1.2
+look_ahead_cells = 5
+blade_room = 1.9
+routes_around_blades = true
+sees_all_blades = true
+knows_objectives = true
+sight_range = 9999
+items = 2
+item_delay = 0.12
+item_detour = 5
+paint_route = 26
+spread = 1.0
+spread_radius = 22

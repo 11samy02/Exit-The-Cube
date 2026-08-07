@@ -20,8 +20,19 @@ class_name PlayerColor
 var color: Color
 
 
+## A cube rolls its own colour in the campaign, where it is nobody else's
+## business.
+##
+## In a round with rules it takes the colour the rest of the game already draws
+## this player in: the ghost the others see, the dot beside the name in the
+## lobby, the row on the board — and in a team round, the side. Rolling here as
+## well would mean every player looked like one colour to themselves and another
+## to everybody else
 func _ready() -> void:
-	color = Color.from_hsv(randf(), saturation, value)
+	var cube := Player.of(self)
+
+	color = Match.color_of(cube.account()) if cube != null and Match.is_racing() \
+		else Color.from_hsv(randf(), saturation, value)
 	mesh.material_override = _build_material()
 
 

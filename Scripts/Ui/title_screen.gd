@@ -5,6 +5,10 @@ extends Control
 
 const LEVEL_SCENE := "res://Scenes/Enviroment/map.tscn"
 
+const ONLINE_SCENE := "res://Scenes/Ui/online_menu.tscn"
+
+const SEAT_SELECT_SCENE := "res://Scenes/Ui/seat_select.tscn"
+
 const START_SOUND := preload("res://Assets/Sounds/UI & Menus/Start.wav")
 
 ## Seconds one breath of the title glow takes
@@ -13,8 +17,8 @@ const START_SOUND := preload("res://Assets/Sounds/UI & Menus/Start.wav")
 ## Seconds the title needs to be typed out letter by letter
 @export var type_duration: float = 0.75
 
-## How far the buttons come in from the left
-@export var slide_distance: float = 90.0
+## How far under their row the buttons start before they rise into it
+@export var slide_distance: float = 26.0
 
 ## Seconds the screen takes to come up out of the black the splash handed over
 ## in. The splash goes down to black over its own load, this is the other half
@@ -27,6 +31,9 @@ const START_SOUND := preload("res://Assets/Sounds/UI & Menus/Start.wav")
 @onready var _levels_button: Button = %LevelsButton
 @onready var _level_select: LevelSelect = %LevelSelect
 @onready var _start_button: Button = %StartButton
+@onready var _coop_button: Button = %CoopButton
+@onready var _party_button: Button = %PartyButton
+@onready var _online_button: Button = %OnlineButton
 @onready var _options_button: Button = %OptionsButton
 @onready var _quit_button: Button = %QuitButton
 @onready var _credits_button: Button = %CreditsButton
@@ -34,6 +41,7 @@ const START_SOUND := preload("res://Assets/Sounds/UI & Menus/Start.wav")
 @onready var _credits: CreditsScreen = %Credits
 @onready var _boot: ColorRect = %Boot
 @onready var _content: Control = %Column
+@onready var _modes_header: Control = %ModesHeader
 
 var _sfx: AudioStreamPlayer
 
@@ -49,7 +57,17 @@ var _intro: Tween = null
 var _starting: bool = false
 
 
+## Standing on the title screen means being in no lobby. A race left through the
+## pause menu would otherwise leave this machine sitting in one, taking a seat
+## the rest of the room can see and nobody is in
 func _ready() -> void:
+	if Online.in_lobby():
+		Online.leave_lobby()
+
+	Seats.clear()
+	Match.stop()
+	SaveGame.use_slot(SaveGame.Slot.SOLO)
+
 	_sfx = AudioStreamPlayer.new()
 	_sfx.bus = &"sfx"
 	add_child(_sfx)
@@ -58,6 +76,9 @@ func _ready() -> void:
 	_continue_button.pressed.connect(_on_continue_pressed)
 	_levels_button.pressed.connect(_on_levels_pressed)
 	_start_button.pressed.connect(_on_start_pressed)
+	_coop_button.pressed.connect(_on_coop_pressed)
+	_party_button.pressed.connect(_on_party_pressed)
+	_online_button.pressed.connect(_on_online_pressed)
 	_options_button.pressed.connect(_on_options_pressed)
 	_credits_button.pressed.connect(_on_credits_pressed)
 	_quit_button.pressed.connect(_on_quit_pressed)
@@ -73,17 +94,25 @@ func _ready() -> void:
 
 ## Continue only stands there while a campaign was left half played. With it up
 ## the first button is no longer the one that starts over, so that one says what
-## it does instead of just Start
+## it does instead of just Start, and the wide accented look moves up to it. On a
+## fresh install Start is the top of the menu and wears that look itself
 func _build_menu() -> void:
 	_continue_button.visible = SaveGame.has_save()
 	_levels_button.visible = SaveGame.unlocked_picks() > 0
 	_start_button.text = "NEW GAME" if _continue_button.visible else "START"
+	_start_button.theme_type_variation = &"" if _continue_button.visible else &"MenuPrimary"
+	_start_button.custom_minimum_size.y = 56.0 if _continue_button.visible else 64.0
 
-	_buttons = [_start_button, _options_button, _credits_button, _quit_button]
+	_buttons = [_start_button]
 	if _levels_button.visible:
-		_buttons.push_front(_levels_button)
+		_buttons.append(_levels_button)
 	if _continue_button.visible:
 		_buttons.push_front(_continue_button)
+
+	_buttons.append_array([
+		_coop_button, _party_button, _online_button,
+		_options_button, _credits_button, _quit_button,
+	])
 
 
 ## Nobody wants to sit through the same opening on the third restart, so any
@@ -124,10 +153,13 @@ func _play_intro() -> void:
 
 	for i in _buttons.size():
 		var button: Control = _buttons[i]
-		var at := typed_at + 0.25 + i * 0.09
+		var at := typed_at + 0.25 + i * 0.05
 		_intro.tween_property(button, "modulate", Color(1, 1, 1, 1), 0.25).set_delay(at)
 		_intro.tween_property(button, "offset_transform_position", Vector2.ZERO, 0.35) \
 			.set_delay(at).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+	var modes_at := typed_at + 0.25 + _buttons.find(_coop_button) * 0.05
+	_intro.tween_property(_modes_header, "modulate", Color(1, 1, 1, 1), 0.25).set_delay(modes_at)
 
 	_intro.chain().tween_callback(_finish_intro)
 
@@ -144,11 +176,12 @@ func _prepare_intro() -> void:
 	_title.modulate = Color(1, 1, 1, 1)
 
 	_subtitle.modulate = Color(1, 1, 1, 0)
+	_modes_header.modulate = Color(1, 1, 1, 0)
 
 	for button in _buttons:
 		button.offset_transform_enabled = true
 		button.offset_transform_pivot_ratio = Vector2(0.5, 0.5)
-		button.offset_transform_position = Vector2(-slide_distance, 0)
+		button.offset_transform_position = Vector2(0, slide_distance)
 		button.modulate = Color(1, 1, 1, 0)
 
 
@@ -166,6 +199,7 @@ func _finish_intro() -> void:
 	_title.visible_ratio = 1.0
 	_title.modulate = Color(1, 1, 1, 1)
 	_subtitle.modulate = Color(1, 1, 1, 1)
+	_modes_header.modulate = Color(1, 1, 1, 1)
 
 	for button in _buttons:
 		button.offset_transform_position = Vector2.ZERO
@@ -185,6 +219,7 @@ func _on_start_pressed() -> void:
 	_starting = true
 	_sfx.stream = START_SOUND
 	_sfx.play()
+	Match.start_campaign(_solo_seat())
 	Levels.start()
 	GameState.start_run()
 	Transition.change_scene(LEVEL_SCENE)
@@ -200,6 +235,7 @@ func _on_continue_pressed() -> void:
 	_starting = true
 	_sfx.stream = START_SOUND
 	_sfx.play()
+	Match.start_campaign(_solo_seat())
 	Levels.start(SaveGame.level_index)
 	GameState.start_run()
 	SaveGame.restore()
@@ -216,9 +252,54 @@ func _on_level_picked(index: int) -> void:
 	_starting = true
 	_sfx.stream = START_SOUND
 	_sfx.play()
+	Match.start_campaign(_solo_seat())
 	Levels.start(index)
 	GameState.start_run()
 	Transition.change_scene(LEVEL_SCENE)
+
+
+## The online side of the game is a screen of its own, everything about it lives
+## behind this one button
+## One seat, on this machine, playing the campaign alone. Everything account
+## keyed still has an account to file the run under
+func _solo_seat() -> Array[int]:
+	Seats.clear()
+	Seats.claim_keyboard()
+	Seats.lock()
+	return Seats.accounts()
+
+
+## The campaign played by everybody in the room, on one screen. Which level it
+## picks up at is the co-op slot's own business, so the seat screen asks the save
+## for it once the seats are known
+func _on_coop_pressed() -> void:
+	_open_seats(SeatSelect.Mode.CAMPAIGN)
+
+
+func _on_party_pressed() -> void:
+	_open_seats(SeatSelect.Mode.PARTY)
+
+
+func _open_seats(mode: int) -> void:
+	if _starting:
+		return
+
+	_starting = true
+	SeatSelect.next_mode = mode
+	SeatSelect.next_level = -1
+	_sfx.stream = START_SOUND
+	_sfx.play()
+	Transition.change_scene(SEAT_SELECT_SCENE)
+
+
+func _on_online_pressed() -> void:
+	if _starting:
+		return
+
+	_starting = true
+	_sfx.stream = START_SOUND
+	_sfx.play()
+	Transition.change_scene(ONLINE_SCENE)
 
 
 func _on_levels_pressed() -> void:

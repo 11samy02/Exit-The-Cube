@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="BotSkill" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Bots/bot_skill.gd" id="1_botsk"]
+
+[resource]
+script = ExtResource("1_botsk")
+label = "NORMAL"
+blurb = "reads the blades and spends its items on purpose"
+think_interval = 0.5
+reaction_time = 0.18
+pace = 0.92
+mistake_chance = 0.06
+foresight = 44
+danger = 1
+danger_range = 5.5
+danger_lookahead = 0.7
+look_ahead_cells = 2
+blade_room = 1.9
+routes_around_blades = false
+sees_all_blades = false
+knows_objectives = false
+sight_range = 18
+items = 2
+item_delay = 1.2
+item_detour = 4
+paint_route = 12
+spread = 0.55
+spread_radius = 14

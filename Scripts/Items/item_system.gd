@@ -1,9 +1,18 @@
 extends Node
 
-## Emitted whenever the slot changes, null means the slot is empty now
+## The catalogue of items, the roll that picks one out of it, and the sound
+## spending one makes.
+##
+## What a cube is carrying used to live here as well, which is right for as long
+## as there is one cube. Four of them need a slot each, so that moved onto the
+## player as a PlayerInventory. The two properties below still answer for the
+## first seat, because everything that was written when there was only ever one
+## cube reads them and is still right on a screen that has only one
+
+## Emitted whenever the first seat's slot changes, null means it is empty now
 signal item_changed(item: ItemData)
 
-## Emitted the moment an item is taken out of the slot and used
+## Emitted the moment an item is taken out of any slot and used
 signal item_used(item: ItemData)
 
 ## Emitted once the effect of that item has run out
@@ -14,12 +23,18 @@ signal effect_finished(item: ItemData)
 ## ever reporting itself as finished
 signal effects_cleared
 
-## The item the player carries, only ever one at a time
-var held_item: ItemData = null
+## What the first cube on this machine is carrying
+var held_item: ItemData:
+	get:
+		var mine := primary()
+		return mine.held_item if mine != null else null
 
-## The effects that are running right now, at most one per item. They run
-## side by side, the UI draws a ring for each of them
-var active_effects: Array[ItemEffect] = []
+## What is running on that cube. Handed back empty rather than null, so a caller
+## may loop over it without asking first
+var active_effects: Array[ItemEffect]:
+	get:
+		var mine := primary()
+		return mine.active_effects if mine != null else _no_effects
 
 ## Every item that was found in the folder, whether the level allows it or not
 var all_items: Array[ItemData] = []
@@ -41,6 +56,9 @@ var rng := RandomNumberGenerator.new()
 
 var use_sound: AudioStreamPlayer = null
 
+## Stands in for the effects of a cube that is not in the level right now
+var _no_effects: Array[ItemEffect] = []
+
 
 func _ready() -> void:
 	rng.randomize()
@@ -48,26 +66,38 @@ func _ready() -> void:
 	_create_sound_player()
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("use_item"):
-		use_held_item()
+## The inventory of the first seat, which is what everything written for a single
+## cube means when it says "the player"
+func primary() -> PlayerInventory:
+	return inventory_of_seat(0)
 
 
-## Rolls a fresh item into the slot, an item that is still in there is replaced.
-## Called by the item sphere the moment the player runs into it. Only returns
-## null when the project has no items at all
-func grant_random_item() -> ItemData:
+func inventory_of_seat(seat: int) -> PlayerInventory:
+	var cube := Player.at_seat(get_tree(), seat)
+	return cube.inventory if cube != null else null
+
+
+## Rolls a fresh item into a slot, an item that is still in there is replaced.
+## Called by the item sphere the moment a player runs into it, and the body that
+## ran into it is whose slot is filled. Only returns null when the project has no
+## items at all
+func grant_random_item(body: Node = null) -> ItemData:
 	if items.is_empty():
 		push_warning("ItemSystem: no items in %s, the sphere has nothing to hand out" % ItemData.FOLDER)
 		return null
 
-	var rolled := _roll_item(available_items())
+	var cube := Player.of(body) if body != null else Player.at_seat(get_tree(), 0)
+	var target := cube.inventory if cube != null else null
+	if target == null:
+		return null
+
+	var rolled := _roll_item(available_items(target))
 	repeat_streak = repeat_streak + 1 if rolled == last_granted else 1
 	last_granted = rolled
 
-	held_item = rolled
-	item_changed.emit(held_item)
-	return held_item
+	target.grant(rolled)
+	Match.count_item(cube.account())
+	return rolled
 
 
 ## Everything the next sphere is allowed to hand out. The item that is already
@@ -75,11 +105,12 @@ func grant_random_item() -> ItemData:
 ## item that just came up max_in_a_row times is left out as well. Neither is a
 ## contingent, so this only ever narrows the roll and never empties it, unless
 ## the project has a single item to begin with
-func available_items() -> Array[ItemData]:
+func available_items(holder: PlayerInventory = null) -> Array[ItemData]:
+	var carried: ItemData = holder.held_item if holder != null else held_item
 	var pool: Array[ItemData] = []
 
 	for item in items:
-		if item == held_item:
+		if item == carried:
 			continue
 		if item == last_granted and item.max_in_a_row > 0 and repeat_streak >= item.max_in_a_row:
 			continue
@@ -100,33 +131,7 @@ func id_of(item: ItemData) -> String:
 	return ""
 
 
-## True while there is an item in the slot to spend
-func can_use_item() -> bool:
-	return held_item != null
-
-
-## Spends the item in the slot and starts its effect on the player. Effects
-## run next to each other, a second item does not cut the first one short
-func use_held_item() -> bool:
-	if not can_use_item():
-		return false
-
-	var target := get_tree().get_first_node_in_group("player") as CharacterBody3D
-	if target == null:
-		return false
-
-	var item := held_item
-	held_item = null
-	item_changed.emit(null)
-
-	GameState.count_item_used()
-	_play_use_sound(item)
-	_start_effect(item, target)
-	item_used.emit(item)
-	return true
-
-
-## Empties the slot, kills every running effect and forgets what was rolled
+## Empties every slot, kills every running effect and forgets what was rolled
 ## last, called whenever a map is built. The pool goes back to the full folder
 ## as well, the level narrows it down again right after and one that does not
 ## would otherwise inherit the restriction of the level before
@@ -135,57 +140,26 @@ func reset() -> void:
 	items = all_items.duplicate()
 	last_granted = null
 	repeat_streak = 0
-	held_item = null
 	item_changed.emit(null)
 	effects_cleared.emit()
 
 
-## The running effect of that item, null while it is not up
-func find_effect(item: ItemData) -> ItemEffect:
-	for effect in active_effects:
-		if is_instance_valid(effect) and effect.data == item:
-			return effect
-
-	return null
-
-
 func stop_all_effects(cancelled: bool) -> void:
-	for effect in active_effects.duplicate():
-		if is_instance_valid(effect):
-			effect.stop(cancelled)
-
-	active_effects.clear()
-
-
-## Spawns the effect on the player, so it dies together with the player it
-## belongs to instead of outliving the run. The same item used twice does not
-## stack, it winds its own effect back up. Two rush effects would multiply the
-## speed and then only take half of it away again
-func _start_effect(item: ItemData, target: CharacterBody3D) -> void:
-	var running := find_effect(item)
-	if running != null:
-		running.restart()
-		return
-
-	if item.effect_scene == null:
-		push_warning("ItemSystem: %s has no effect scene, nothing happens" % item.display_name)
-		return
-
-	var effect := item.effect_scene.instantiate() as ItemEffect
-	if effect == null:
-		push_error("ItemSystem: the effect scene of %s does not extend ItemEffect" % item.display_name)
-		return
-
-	effect.data = item
-	effect.player = target
-	active_effects.append(effect)
-	effect.finished.connect(_on_effect_finished.bind(item, effect))
-	target.add_child(effect)
+	for node in get_tree().get_nodes_in_group(PlayerInventory.GROUP):
+		var holder := node as PlayerInventory
+		holder.stop_all(cancelled)
+		holder.grant(null)
 
 
-func _on_effect_finished(item: ItemData, effect: ItemEffect) -> void:
-	active_effects.erase(effect)
-	effect_finished.emit(item)
+## Every inventory reports through here as it comes up, so anything that only
+## ever cared that an item was used at all still hears about it whichever cube
+## did it. The slot signal stays the first seat's, it is what the shared HUD draws
+func adopt(holder: PlayerInventory, seat: int) -> void:
+	holder.item_used.connect(func(item: ItemData) -> void: item_used.emit(item))
+	holder.effect_finished.connect(func(item: ItemData) -> void: effect_finished.emit(item))
+
+	if seat == 0:
+		holder.item_changed.connect(func(item: ItemData) -> void: item_changed.emit(item))
 
 
 ## Cuts the pool down to the items the level lists, everything else stops
@@ -239,7 +213,7 @@ func _create_sound_player() -> void:
 	add_child(use_sound)
 
 
-func _play_use_sound(item: ItemData) -> void:
+func play_use_sound(item: ItemData) -> void:
 	if item.use_sound == null:
 		return
 

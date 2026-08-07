@@ -37,15 +37,30 @@ enum Mind {
 ## set here to pin a single behaviour down while testing one of them
 @export var mind: Mind = Mind.HUNTER
 
+@export_group("Fairness")
+
+## The most of the cube's own speed a steered blade may do, whatever speed the
+## level asked its blades to run at.
+##
+## A patrolling blade may be as fast as the level likes: it is somewhere on the
+## map that has to be gone around, and going around it is a thing the player
+## decides to do. One that comes after you is a different question, and under one
+## is the only answer to it — a blade that is faster than the cube, sees twelve
+## cells and never tires cannot be escaped, only survived until it happens to look
+## elsewhere. Under the cube's speed it is still frightening, still cuts corners
+## and still herds you into the corridors it wants; it is just no longer a thing
+## you lose to by having been seen
+@export_range(0.4, 1.5) var top_speed_share: float = 0.88
+
 @export_group("Senses")
 
 ## How far the saw sees, in cells. Line of sight is taken through the corridors,
 ## a player behind a wall is not seen however close they are
-@export var sight_range: int = 12
+@export var sight_range: int = 9
 
 ## Seconds a lost player is hunted at their last known cell before the saw gives
 ## up on them and falls back to what it does when it sees nothing
-@export var memory_time: float = 4.0
+@export var memory_time: float = 2.5
 
 @export_group("Routes")
 
@@ -98,6 +113,14 @@ var _visited: Dictionary = {}
 
 ## Counts up so the SWEEPER has something to order its visits by
 var _clock: float = 0.0
+
+
+## What this blade may actually run at, out of what the level asked for. Called
+## by the spawner instead of writing the level's number straight onto the mover,
+## so a steered blade is held to the ceiling above however fast the maze around
+## it is meant to be
+func fair_speed(asked: float) -> float:
+	return minf(asked, RaceRules.book().player_speed * top_speed_share)
 
 
 ## Called by the spawner once the map and everything in it stands. Nothing works
@@ -382,8 +405,16 @@ func _objective_cell() -> Vector2i:
 	return doors[0] if not doors.is_empty() else Vector2i(-1, -1)
 
 
-func _player() -> CharacterBody3D:
-	return get_tree().get_first_node_in_group("player") as CharacterBody3D
+## The cube this blade hunts. Whichever one is closest to it, so a saw does not
+## walk past the player in front of it to chase somebody across the maze
+func _player() -> Player:
+	if mover == null or mover.parent == null:
+		return null
+
+	if mover.seat >= 0:
+		return Player.at_seat(get_tree(), mover.seat)
+
+	return Player.nearest(get_tree(), mover.parent.global_position)
 
 
 func _cell_of_player() -> Vector2i:

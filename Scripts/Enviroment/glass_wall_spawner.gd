@@ -74,6 +74,35 @@ func spawn_walls() -> void:
 		room.remove_at(index)
 		_close_in_on(candidates, room, cell)
 
+	_hand_out()
+
+
+## In a local race every pane is set once per seat, into the same cells.
+##
+## Where they go was decided above, so nothing is rolled again — the extra sets
+## are placed straight on top of the first one. It costs a handful of bodies per
+## player, and it is the only way an item that drops the glass can drop it for
+## the one player who actually spent it
+func _hand_out() -> void:
+	if not Match.is_private_race() or spawned_walls.is_empty():
+		return
+
+	var players := Player.all(get_tree())
+	var cells := used_cells.duplicate()
+	var sets: Array = [spawned_walls.duplicate()]
+
+	for seat in range(1, players.size()):
+		var copies: Array[GlassWall] = []
+
+		for cell in cells:
+			copies.append(_place_wall(cell, false))
+
+		sets.append(copies)
+
+	for seat in range(sets.size()):
+		for wall: GlassWall in sets[seat]:
+			wall.claim(seat, players)
+
 
 ## Every wall cell a pane may be set into: wall on two opposite sides of it and
 ## open corridor on the other two. That is the whole rule, and it is what keeps
@@ -150,7 +179,10 @@ func _close_in_on(candidates: Array[Vector2i], room: PackedInt32Array, placed: V
 ## Takes the wall cube out of the GridMap and puts a pane in its place. The cell
 ## stays a wall as far as the maze is concerned, it is only no longer drawn by
 ## the GridMap because the pane has to be able to move and a grid cell cannot
-func _place_wall(cell: Vector2i) -> void:
+## Sets one pane into that cell. A repeat pass for another seat goes into a cell
+## that is already spoken for, so it does not claim it a second time — the list
+## of taken cells is what the spread is worked out from
+func _place_wall(cell: Vector2i, remember: bool = true) -> GlassWall:
 	var grid_map := map_generator.grid_map
 	grid_map.set_cell_item(Vector3i(cell.x, 1, cell.y), GridMap.INVALID_CELL_ITEM)
 
@@ -159,7 +191,11 @@ func _place_wall(cell: Vector2i) -> void:
 	wall.setup(grid_map, cell, item_index)
 
 	spawned_walls.append(wall)
-	used_cells.append(cell)
+
+	if remember:
+		used_cells.append(cell)
+
+	return wall
 
 
 func _clear_walls() -> void:

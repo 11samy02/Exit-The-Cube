@@ -42,6 +42,18 @@ font = ExtResource("5_body")
 font_size = 28
 font_color = Color(0.616, 0.588, 0.749, 1)
 
+[sub_resource type="FontVariation" id="FontVariation_section"]
+base_font = ExtResource("4_orbitron")
+variation_opentype = {
+2003265652: 600
+}
+spacing_glyph = 5
+
+[sub_resource type="LabelSettings" id="LabelSettings_section"]
+font = SubResource("FontVariation_section")
+font_size = 13
+font_color = Color(0.494, 0.451, 0.639, 1)
+
 [node name="TitleScreen" type="Control" unique_id=782645538]
 layout_mode = 3
 anchors_preset = 15
@@ -96,51 +108,133 @@ label_settings = SubResource("LabelSettings_subtitle")
 horizontal_alignment = 1
 
 [node name="Gap" type="Control" parent="Layout/Column" unique_id=1689248563]
-custom_minimum_size = Vector2(0, 70)
+custom_minimum_size = Vector2(0, 84)
 layout_mode = 2
 mouse_filter = 2
 
 [node name="MenuColumn" type="VBoxContainer" parent="Layout/Column" unique_id=556668215]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(600, 0)
 layout_mode = 2
 size_flags_horizontal = 4
-theme_override_constants/separation = 16
+theme_override_constants/separation = 10
 
 [node name="ContinueButton" type="Button" parent="Layout/Column/MenuColumn" unique_id=1366496659]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(340, 66)
+custom_minimum_size = Vector2(0, 64)
 layout_mode = 2
+theme_type_variation = &"MenuPrimary"
 text = "CONTINUE"
 
-[node name="LevelsButton" type="Button" parent="Layout/Column/MenuColumn" unique_id=1366496658]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(340, 66)
+[node name="PlayRow" type="HBoxContainer" parent="Layout/Column/MenuColumn"]
 layout_mode = 2
-text = "LEVELS"
+mouse_filter = 2
+theme_override_constants/separation = 10
 
-[node name="StartButton" type="Button" parent="Layout/Column/MenuColumn" unique_id=1366496660]
+[node name="StartButton" type="Button" parent="Layout/Column/MenuColumn/PlayRow" unique_id=1366496660]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(340, 66)
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
+size_flags_horizontal = 3
 text = "START"
 
-[node name="OptionsButton" type="Button" parent="Layout/Column/MenuColumn" unique_id=1152258509]
+[node name="LevelsButton" type="Button" parent="Layout/Column/MenuColumn/PlayRow" unique_id=1366496658]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(340, 66)
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
+size_flags_horizontal = 3
+text = "LEVELS"
+
+[node name="ModesHeader" type="HBoxContainer" parent="Layout/Column/MenuColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="LineLeft" type="ColorRect" parent="Layout/Column/MenuColumn/ModesHeader"]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+color = Color(0.404, 0.263, 0.784, 0.45)
+
+[node name="Label" type="Label" parent="Layout/Column/MenuColumn/ModesHeader"]
+layout_mode = 2
+mouse_filter = 2
+text = "MULTIPLAYER"
+label_settings = SubResource("LabelSettings_section")
+vertical_alignment = 1
+
+[node name="LineRight" type="ColorRect" parent="Layout/Column/MenuColumn/ModesHeader"]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+color = Color(0.404, 0.263, 0.784, 0.45)
+
+[node name="ModeRow" type="HBoxContainer" parent="Layout/Column/MenuColumn"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="CoopButton" type="Button" parent="Layout/Column/MenuColumn/ModeRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"MenuMode"
+text = "SPLITSCREEN"
+
+[node name="PartyButton" type="Button" parent="Layout/Column/MenuColumn/ModeRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"MenuMode"
+text = "PARTY"
+
+[node name="OnlineButton" type="Button" parent="Layout/Column/MenuColumn/ModeRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"MenuMode"
+text = "ONLINE"
+
+[node name="UtilityGap" type="Control" parent="Layout/Column/MenuColumn"]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="UtilityRow" type="HBoxContainer" parent="Layout/Column/MenuColumn"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="OptionsButton" type="Button" parent="Layout/Column/MenuColumn/UtilityRow" unique_id=1152258509]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+theme_type_variation = &"MenuGhost"
 text = "OPTIONS"
 
-[node name="CreditsButton" type="Button" parent="Layout/Column/MenuColumn"]
+[node name="CreditsButton" type="Button" parent="Layout/Column/MenuColumn/UtilityRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(340, 66)
+custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
+theme_type_variation = &"MenuGhost"
 text = "CREDITS"
 
-[node name="QuitButton" type="Button" parent="Layout/Column/MenuColumn" unique_id=1404211800]
+[node name="QuitButton" type="Button" parent="Layout/Column/MenuColumn/UtilityRow" unique_id=1404211800]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(340, 66)
+custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "EXIT GAME"
+theme_type_variation = &"MenuGhost"
+text = "EXIT"
 
 [node name="Version" type="Label" parent="." unique_id=1494104500]
 layout_mode = 1

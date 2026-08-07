@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="MapShape" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Online/Rules/map_shape.gd" id="1_uplws"]
+
+[resource]
+script = ExtResource("1_uplws")
+label = "ROUND"
+shape = 1
+blurb = "no corners to hide in"

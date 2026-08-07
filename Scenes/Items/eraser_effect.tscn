@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Scripts/Items/Effects/eraser_effect.gd" id="1_e"]
+[ext_resource type="PackedScene" path="res://Scenes/Items/eraser_roller.tscn" id="2_roller"]
+
+[node name="EraserEffect" type="Node"]
+script = ExtResource("1_e")
+roller_scene = ExtResource("2_roller")

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StatusEffectData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Player/Status/status_effect_data.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "slow"
+display_name = "SOAKED"
+accent_color = Color(0.35, 0.7, 1, 1)
+duration = 8.0
+speed_multiplier = 0.6
+wobble = 0.0
+stun_seconds = 0.0

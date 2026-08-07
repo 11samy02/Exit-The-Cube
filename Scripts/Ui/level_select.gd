@@ -14,6 +14,11 @@ signal closed
 ## at it
 signal level_picked(index: int)
 
+## How much of the campaign this panel is allowed to offer. -1 leaves it to the
+## slot that is being played, which is what the title screen wants
+var open_picks: int = -1
+var open_levels: int = -1
+
 ## Size of one pip in the campaign strip
 const PIP_SIZE := Vector2(20, 20)
 
@@ -68,6 +73,11 @@ const CARD_IDLE_DIM := 0.5
 ## A level of the campaign that is still locked away
 @export var locked_color: Color = Color(0.28, 0.24, 0.4)
 
+## A level whose only clear was one a CPU played out. Warm against the cool hues
+## the rest of the panel runs on, so a stamped level stands out of the strip
+## without having to be read
+@export var helped_color: Color = Color(1.0, 0.55, 0.3)
+
 ## Shown wherever a level was never finished and has no number to give
 @export var no_record: String = "—"
 
@@ -76,6 +86,7 @@ const CARD_IDLE_DIM := 0.5
 @onready var _number: Label = %Number
 @onready var _level_name: Label = %LevelName
 @onready var _state_value: Label = %StateValue
+@onready var _help_mark: Control = %HelpMark
 @onready var _previous_card: Button = %PreviousCard
 @onready var _previous_number: Label = %PreviousNumber
 @onready var _previous_name: Label = %PreviousName
@@ -283,7 +294,19 @@ func close() -> void:
 ## How many of the listed levels are open. They unlock from the front of the
 ## campaign, so the open ones are always the first slots
 func _open_count() -> int:
-	return mini(SaveGame.unlocked_picks(), _picks.size())
+	return mini(_picks_open(), _picks.size())
+
+
+## How many of the listed levels this panel may open, and how far up the
+## campaign that reaches. Left to the slot being played unless whoever opened
+## the panel said otherwise — the seat select does, because a room is allowed
+## everything either slot has already cleared
+func _picks_open() -> int:
+	return SaveGame.unlocked_picks() if open_picks < 0 else open_picks
+
+
+func _levels_open() -> int:
+	return SaveGame.unlocked_levels() if open_levels < 0 else open_levels
 
 
 ## The slot that level of the campaign is listed at. A campaign standing on a
@@ -354,8 +377,9 @@ func _build_strip() -> void:
 		var pip := Button.new()
 		pip.custom_minimum_size = pip_size
 		pip.focus_mode = Control.FOCUS_NONE
-		pip.tooltip_text = "%02d  %s" % [slot + 1, Levels.title_of(level)]
-		pip.disabled = level >= SaveGame.unlocked_levels()
+		pip.tooltip_text = "%02d  %s%s" % [slot + 1, Levels.title_of(level),
+			"  ·  CLEARED BY CPU" if SaveGame.was_helped(level) else ""]
+		pip.disabled = level >= _levels_open()
 		pip.pressed.connect(_jump_to.bind(slot))
 		_strip.add_child(pip)
 		_pips.append(pip)
@@ -392,6 +416,7 @@ func _show_level() -> void:
 
 	_state_value.text = "NEXT UP" if _is_next(level) else "CLEARED"
 	_state_value.label_settings.font_color = next_color if _is_next(level) else accent
+	_help_mark.visible = SaveGame.was_helped(level)
 
 	_show_neighbours(_open_count())
 	_show_record(level)
@@ -424,22 +449,23 @@ func _show_neighbours(open: int) -> void:
 	_next_name.text = Levels.title_of(_picks[ahead]) if enabled else ""
 
 
-## A level that was cleared before the game started keeping records has none,
-## and neither has the one the campaign stands on. Both say so instead of
-## showing a zero that would read as a perfect run
+## A level that was cleared before the game started keeping records has none, the
+## one the campaign stands on has none, and neither has one only a CPU ever got
+## out of — those two numbers are what the player did with the level, so a run
+## they sat and watched leaves them exactly as they were. All three say so instead
+## of showing a zero that would read as a perfect run
 func _show_record(level: int) -> void:
 	var record := SaveGame.record_of(level)
-	if record.is_empty():
-		_time_value.text = no_record
-		_death_value.text = no_record
-		return
+	var time := float(record.get("time", SaveGame.NO_TIME))
+	var deaths := int(record.get("deaths", SaveGame.NO_DEATHS))
 
-	_time_value.text = _format_time(float(record.get("time", 0.0)))
-	_death_value.text = "%d" % int(record.get("deaths", 0))
+	_time_value.text = _format_time(time) if time < SaveGame.NO_TIME else no_record
+	_death_value.text = "%d" % deaths if deaths < SaveGame.NO_DEATHS else no_record
 
 
-## The strip says three things at a glance: what is done, where the player
-## stands and how much of the campaign is still dark
+## The strip says four things at a glance: what is done, where the player stands,
+## how much of the campaign is still dark, and which of the cleared ones were not
+## cleared by the player
 func _paint_strip() -> void:
 	for slot in range(_pips.size()):
 		var level: int = _picks[slot]
@@ -452,10 +478,12 @@ func _paint_strip() -> void:
 		elif level < SaveGame.level_index:
 			color = _accent_of(slot) * 0.75
 
-		_style_pip(_pips[slot], color, slot == _slot)
+		_style_pip(_pips[slot], color, slot == _slot, SaveGame.was_helped(level))
 
 
-func _style_pip(pip: Button, color: Color, is_current: bool) -> void:
+## One pip. A level a CPU finished keeps its own colour and is ringed instead, so
+## it still reads as cleared and as owing a run at the same time
+func _style_pip(pip: Button, color: Color, is_current: bool, helped: bool) -> void:
 	var box := StyleBoxFlat.new()
 	box.bg_color = color
 	box.corner_radius_top_left = 4
@@ -466,6 +494,13 @@ func _style_pip(pip: Button, color: Color, is_current: bool) -> void:
 	if is_current:
 		box.expand_margin_top = 5.0
 		box.expand_margin_bottom = 5.0
+
+	if helped:
+		box.border_color = helped_color
+		box.border_width_left = 2
+		box.border_width_top = 2
+		box.border_width_right = 2
+		box.border_width_bottom = 2
 
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		pip.add_theme_stylebox_override(state, box)

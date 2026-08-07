@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="Difficulty" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Online/Rules/difficulty.gd" id="1_5o8bq"]
+
+[resource]
+script = ExtResource("1_5o8bq")
+blurb = "the one the campaign would call a tuesday"

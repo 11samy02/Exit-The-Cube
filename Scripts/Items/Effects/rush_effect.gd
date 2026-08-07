@@ -30,16 +30,16 @@ const RUSH_SHADER := "res://Assets/shaders/RainbowRush.gdshader"
 
 ## How hard the screen edge glows while the effect runs in ego perspective,
 ## where the rainbow on the cube itself cannot be seen
-@export var vignette_strength: float = 0.9
+@export var vignette_strength: float = 0.42
 
 ## Seconds before the end at which the cube starts flickering
 @export var warning_time: float = 2.5
 
 ## Flickers per second while the effect runs out
-@export var warning_blink_speed: float = 4.0
+@export var warning_blink_speed: float = 2.2
 
 ## How far the glow drops on a flicker, 0 would switch the cube off completely
-@export_range(0.0, 1.0) var warning_low_pulse: float = 0.25
+@export_range(0.0, 1.0) var warning_low_pulse: float = 0.62
 
 var mesh: MeshInstance3D = null
 var movement: PlayerMovement = null
@@ -49,11 +49,11 @@ var previous_material: Material = null
 
 
 func _start() -> void:
-	movement = get_tree().get_first_node_in_group("player_movement") as PlayerMovement
+	movement = player.movement if player != null else null
 	if movement != null:
 		movement.set_boost(&"rush", speed_multiplier)
 
-	death = get_tree().get_first_node_in_group("player_death") as PlayerDeath
+	death = player.death if player != null else null
 	if death != null:
 		death.set_guard(&"rush")
 

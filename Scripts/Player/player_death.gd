@@ -138,15 +138,29 @@ func kill(force: bool = false) -> void:
 		return
 
 	is_dead = true
+	var cube := Player.of(self)
+	var quiet := cube != null and cube.is_ghosted()
 	var survived := Time.get_ticks_msec() / 1000.0 - _spawned_at
+
 	_paint_blood()
 	mesh.visible = false
 	movement.disable()
 	chunks.restart()
 	burst.restart()
-	death_sound.play()
 	screen_shake.shake(shake_strength)
-	_flash()
+
+	if not quiet:
+		death_sound.play()
+		_flash()
+
+	if Match.serves_penalty() or (cube != null and cube.is_ghosted()):
+		await _sit_out()
+		return
+
+	var coop := CoopCoordinator.find(get_tree())
+	if coop != null:
+		_sit_out_together(coop, survived)
+		return
 
 	await get_tree().create_timer(reload_delay).timeout
 	GameState.add_death()
@@ -154,10 +168,92 @@ func kill(force: bool = false) -> void:
 	Transition.reload_scene()
 
 
+## What dying costs while the level is being played by a room.
+##
+## Nothing is awaited here. The wait belongs to the coordinator, which is the one
+## thing that can see whether this death is worth five seconds or the whole
+## level — and a timer running inside a cube that is about to be freed by the
+## rebuild would be racing the very thing it is waiting for.
+##
+## Only the first seat's death is commented on. Four cubes bursting into the same
+## saw is one event to the room and four lines of commentary would read as the
+## game shouting
+func _sit_out_together(coop: CoopCoordinator, survived: float) -> void:
+	var cube := Player.of(self)
+	var seat := cube.seat if cube != null else 0
+
+	GameState.add_death()
+
+	if seat == 0:
+		Quips.report_death(GameState.deaths, survived)
+
+	coop.report_death(seat)
+
+
+## How long that cube stays down. A mode with a penalty of its own says so; a
+## ghost in a race has none, and it takes the co-op wait rather than the tenth of
+## a second the floor of the sum would leave it with
+func _wait_for(cube: Player) -> float:
+	var own := Match.death_penalty_seconds()
+	if own > 0.0:
+		return own
+
+	return CoopCoordinator.RESPAWN_SECONDS if cube != null and cube.is_ghosted() else 0.0
+
+
+## What dying costs in a painting round, and what it costs a bot anywhere.
+##
+## The level is not rebuilt. A round is five minutes with everybody dying in it
+## repeatedly, and tearing the maze down and putting it back each time would
+## spend most of the round on loading screens — worse, it would reset the blades
+## for one player and not the others.
+##
+## A CPU in a race goes the same way, and that is the whole reason it does: a bot
+## bursting used to reload the level it was standing in, which in a race is the
+## player's own maze. One CPU walking into a blade sent everybody back to the
+## start line.
+##
+## The tiles go first so that the others see the hole appear at the moment of the
+## death rather than five seconds later
+func _sit_out() -> void:
+	var cube := Player.of(self)
+	var account := cube.account() if cube != null else 0
+
+	_count_death(cube)
+	Match.lose_tiles(account, Match.mode().death_tile_penalty)
+	Match.begin_penalty(account)
+
+	var spawner := cube.spawn if cube != null else null
+	var lead := spawner.entrance_lead() if spawner != null else 0.0
+
+	await get_tree().create_timer(maxf(_wait_for(cube) - lead, 0.1)).timeout
+	if not is_inside_tree():
+		return
+
+	is_dead = false
+
+	if spawner != null:
+		spawner.respawn()
+
+
+## Counts the death where it belongs. A bot's is the round's business and never
+## the run's: eight CPUs bursting into blades would otherwise read on the summary
+## as the player having died forty times
+func _count_death(cube: Player) -> void:
+	Match.count_death(cube.account() if cube != null else 0)
+
+	if cube == null or not cube.is_bot:
+		GameState.add_death()
+
+
 ## Leaves the cube on the walls around that point, in its own color. The map
 ## keeps the splatter over a reload, so the next attempt runs past it again.
 ## Called for the burst itself and by whatever else spills the cube open
 func splatter(origin: Vector3) -> void:
+	var cube := Player.of(self)
+	if cube != null and cube.is_ghosted():
+		return
+
 	var blood := get_tree().get_first_node_in_group("blood_spawner") as BloodSpawner
 	if blood == null:
 		return

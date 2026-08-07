@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="Difficulty" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Online/Rules/difficulty.gd" id="1_njgfg"]
+
+[resource]
+script = ExtResource("1_njgfg")
+label = "NIGHTMARE"
+blurb = "a maze of dead ends, sealed shut, hunted"
+openness = 0.03
+roof = 0.0
+corridors_per_saw = 20.0
+speed = Vector2(1.05, 1.35)
+ai_saws = 6
+patrol = Vector2i(3, 14)
+spacing = 1
+corridors_per_item = 58.0

@@ -54,12 +54,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+## The tree is not frozen in a race. Eleven other cubes keep running whatever
+## this one does, and a menu that stopped the clock would be the fastest route
+## through every maze in the game
 func open() -> void:
 	if _paused:
 		return
 
 	_paused = true
-	get_tree().paused = true
+	get_tree().paused = not Match.is_racing()
 	_root.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	UiFeedback.play_click()

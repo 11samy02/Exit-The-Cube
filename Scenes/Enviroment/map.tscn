@@ -22,6 +22,7 @@
 [ext_resource type="PackedScene" uid="uid://kp1t38lc0s37" path="res://Scenes/Ui/game_ui.tscn" id="14_gmui"]
 [ext_resource type="PackedScene" path="res://Scenes/Ui/pause_menu.tscn" id="15_pause"]
 [ext_resource type="PackedScene" path="res://Scenes/Ui/run_summary.tscn" id="16_summary"]
+[ext_resource type="PackedScene" path="res://Scenes/Ui/autopilot_offer.tscn" id="16_autopilot"]
 [ext_resource type="Shader" uid="uid://qg165vmnva1e" path="res://Assets/shaders/Footprint.gdshader" id="17_print"]
 [ext_resource type="Script" uid="uid://d1apkovcw6qht" path="res://Scripts/Enviroment/footprints.gd" id="17_steps"]
 
@@ -109,7 +110,7 @@ map_generator = NodePath("../Map Generator")
 holder = NodePath("../../Objects")
 player_spawner = NodePath("../Player Spawner")
 
-[node name="Saw Spawner" type="Node" parent="Scripts" unique_id=1497803928 node_paths=PackedStringArray("map_generator", "holder", "player_spawner", "key_spawner", "elevator_spawner")]
+[node name="Saw Spawner" type="Node" parent="Scripts" unique_id=1497803928 node_paths=PackedStringArray("map_generator", "holder", "player_spawner", "key_spawner", "elevator_spawner") groups=["saw_spawner"]]
 script = ExtResource("6_wsdu4")
 saw_scene = ExtResource("7_iuuh5")
 map_generator = NodePath("../Map Generator")
@@ -143,7 +144,7 @@ min_distance_to_key = 13
 min_distance_to_player = 16
 spawn_point_count = 5
 
-[node name="Item Spawner" type="Node" parent="Scripts" unique_id=170806516 node_paths=PackedStringArray("map_generator", "holder", "key_spawner", "player_spawner")]
+[node name="Item Spawner" type="Node" parent="Scripts" unique_id=170806516 node_paths=PackedStringArray("map_generator", "holder", "key_spawner", "player_spawner") groups=["item_spawner"]]
 script = ExtResource("10_tnm3o")
 item_scene = ExtResource("11_trlax")
 map_generator = NodePath("../Map Generator")
@@ -154,7 +155,7 @@ min_distance_to_player = 3
 item_count = 256
 min_distance = 5
 
-[node name="Player Spawner" type="Node" parent="Scripts" unique_id=506162328 node_paths=PackedStringArray("map_generator", "holder")]
+[node name="Player Spawner" type="Node" parent="Scripts" unique_id=506162328 node_paths=PackedStringArray("map_generator", "holder") groups=["player_spawner"]]
 script = ExtResource("12_1c076")
 player_scene = ExtResource("13_pl4yr")
 map_generator = NodePath("../Map Generator")
@@ -165,13 +166,17 @@ holder = NodePath("../../Objects")
 script = ExtResource("13_blood")
 ink_shader = ExtResource("13_ink")
 holder = NodePath("../../Blood")
-visible_deaths = 25
+visible_deaths = 100
+ink_radius = 3.0
 
 [node name="Footprints" type="Node" parent="Scripts" unique_id=506162330 node_paths=PackedStringArray("holder", "blood_spawner")]
 script = ExtResource("17_steps")
 print_shader = ExtResource("17_print")
 holder = NodePath("../../Blood")
 blood_spawner = NodePath("../Blood Spawner")
+max_prints = 1600
+steps_per_pickup = 16
+print_size = 0.6
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1709855645]
 environment = SubResource("Environment_c3ncp")
@@ -205,3 +210,5 @@ pop_duration = null
 [node name="Run Summary" parent="." unique_id=1675142319 instance=ExtResource("16_summary")]
 row_delay = null
 type_duration = null
+
+[node name="Autopilot Offer" parent="." unique_id=1675142320 instance=ExtResource("16_autopilot")]

@@ -24,13 +24,15 @@ extends GridMap
 
 
 ## The campaign decides which level is built, the resource on this node is only
-## what the scene falls back to when it is opened on its own.
+## what the scene falls back to when it is opened on its own. A round with rules
+## of its own brings its level along and comes first, it is the one thing that is
+## not picked out of a list but generated from the seed everybody shares.
 ##
 ## The UI reads the run state in its own _ready, and a child is ready before its
 ## parent. Handing the level over here instead of in _ready keeps the UI from
 ## showing the key of the attempt before across a scene reload.
 func _enter_tree() -> void:
-	var level := Levels.current()
+	var level := Match.level() if Match.is_racing() else Levels.current()
 	if level != null:
 		map_data = level
 
@@ -56,14 +58,22 @@ func _ready() -> void:
 
 	if player_spawner != null:
 		player_spawner.generate_spawn_points()
-		player_spawner.spawn_player()
+		Match.spawn_cells_from(map_generator.get_path_cells(), map_generator.width)
 
-	key_spawner.generate_spawn_points()
-	key_spawner.spawn_key()
+		player_spawner.spawn_seats(Match.seat_cells())
 
-	if elevator_spawner != null:
-		elevator_spawner.generate_spawn_points()
-		elevator_spawner.spawn_elevator()
+	var with_exit := map_data == null or map_data.with_exit
+
+	if with_exit:
+		key_spawner.generate_spawn_points()
+		key_spawner.spawn_keys(Match.key_owners())
+
+		if elevator_spawner != null:
+			elevator_spawner.generate_spawn_points()
+			elevator_spawner.spawn_elevator()
+	else:
+		saw_spawner.key_spawner = null
+		saw_spawner.elevator_spawner = null
 
 	if glass_wall_spawner != null:
 		glass_wall_spawner.spawn_walls()
@@ -75,6 +85,8 @@ func _ready() -> void:
 
 	if blood_spawner != null:
 		blood_spawner.spawn_marks()
+
+	Match.attach_to_map(self)
 
 
 ## Hands the level over to the spawners, one section per spawner
@@ -160,6 +172,7 @@ func _apply_items() -> void:
 	item_spawner.min_distance = map_data.item_min_distance
 	item_spawner.min_distance_to_player = map_data.item_min_distance_to_player
 	item_spawner.spawn_seed = map_data.item_spawn_seed
+	item_spawner.restock = map_data.restock_items
 
 
 ## A level that says it has no glass walls gets none, whatever count it carries.

@@ -50,6 +50,9 @@ func _ready() -> void:
 ## pools can share one key on purpose: the summary draws from a list that is
 ## mixed together fresh for every run and still never repeats itself
 func pick(key: String, lines: Array) -> String:
+	if QuipBook.has(key):
+		lines = Array(QuipBook.pool(key))
+
 	if lines.is_empty():
 		return ""
 

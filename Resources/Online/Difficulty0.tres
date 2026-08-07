@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="Difficulty" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Online/Rules/difficulty.gd" id="1_pf2av"]
+
+[resource]
+script = ExtResource("1_pf2av")
+label = "STROLL"
+blurb = "wide halls, lazy blades, a sphere on every corner"
+openness = 0.62
+glass_walls = false
+corridors_per_saw = 90.0
+speed = Vector2(0.45, 0.6)
+ai_saws = 0
+patrol = Vector2i(3, 6)
+spacing = 3
+corridors_per_item = 22.0
