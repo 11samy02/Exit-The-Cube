@@ -30,6 +30,26 @@ const USE_ACTION := &"use_item"
 ## automatic
 @export var ring_padding: float = 8.0
 
+## How far inside the innermost ring the item itself is drawn, in pixels.
+##
+## The icon used to be given the whole box the slot occupies, and the ring is
+## drawn around the middle of that box rather than around its edge — so a wide
+## item sat on top of its own ring, or out past it. This is the gap between the
+## two, and it is kept from here rather than from the layouts so the shared HUD
+## and a split screen cannot drift apart on it
+@export var icon_inset: float = 10.0
+
+## How far under the outermost ring the line that spells out the button sits.
+##
+## Also measured from the ring and not from the box. The rings grow outwards as
+## effects run, so a prompt placed against the bottom of the box is a prompt that
+## gets covered up by the first thing the player picks up
+@export var label_gap: float = 8.0
+
+## How many rings the room under the slot is left for. Two effects at once is
+## already unusual and a third only costs the prompt a few pixels of air
+@export var label_rings: int = 2
+
 ## Color of the part of the ring that has already run out
 @export var ring_background: Color = Color(1, 1, 1, 0.1)
 
@@ -68,10 +88,53 @@ var _no_effects: Array[ItemEffect] = []
 func _ready() -> void:
 	InputIcons.device_changed.connect(_on_device_changed)
 	Settings.bindings_changed.connect(_refresh_prompt)
+	resized.connect(_lay_out)
+	_lay_out()
 
 	if seat < 0:
 		ItemSystem.item_changed.connect(_on_item_changed)
 		_show_item(ItemSystem.held_item)
+
+
+## Puts the item inside its ring and the prompt clear underneath it.
+##
+## Both are worked out from where the ring actually is rather than from the box
+## the slot was given, because those are two different circles: the ring is drawn
+## around the middle of the box and reaches past its edge, so a layout that lines
+## anything up with the edge lines it up with nothing
+func _lay_out() -> void:
+	var inner := _inner_radius()
+	var reach := minf(inner - icon_inset, minf(size.x, size.y) * 0.5)
+
+	if icon != null:
+		icon.set_anchors_preset(Control.PRESET_CENTER)
+		icon.offset_left = -reach
+		icon.offset_right = reach
+		icon.offset_top = -reach
+		icon.offset_bottom = reach
+
+	var under := (inner + float(maxi(label_rings, 0)) * ring_spacing
+		+ ring_width * 0.5 + label_gap) - size.y * 0.5
+
+	_drop_below(hint, under)
+	_drop_below(use_icon, under)
+
+
+## Moves one thing that sits under the slot down to there, keeping the height it
+## was laid out with
+func _drop_below(what: Control, under: float) -> void:
+	if what == null:
+		return
+
+	var high := what.offset_bottom - what.offset_top
+	what.offset_top = under
+	what.offset_bottom = under + high
+
+
+## Where the innermost ring is drawn, which is the one thing every other measure
+## in here hangs off. The same line the drawing itself uses
+func _inner_radius() -> float:
+	return ring_radius if ring_radius > 0.0 else minf(size.x, size.y) * 0.5 + ring_padding
 
 
 ## Ties this slot to one cube's own inventory. A death rebuilds the cube, so
@@ -123,6 +186,12 @@ func _process(_delta: float) -> void:
 ## Every running effect gets its own ring in the color of its item, so a glance
 ## says which of them is about to run out. They keep the order they were
 ## started in, a ring that jumps around would be harder to follow than to read
+## The circle everything outside the slot has to keep clear of, which is what the
+## rest of the interface asks before putting anything near it
+func outer_radius() -> float:
+	return _inner_radius() + float(maxi(label_rings, 0)) * ring_spacing + ring_width * 0.5
+
+
 func _draw() -> void:
 	var center := size * 0.5
 	var base := ring_radius if ring_radius > 0.0 else minf(size.x, size.y) * 0.5 + ring_padding

@@ -53,8 +53,9 @@ _surfaces = [{
 blend_shape_mode = 0
 shadow_mesh = SubResource("ArrayMesh_8shik")
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_srb8v"]
-size = Vector3(1.2, 1.2, 1.2)
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_body"]
+height = 1.2
+radius = 0.56
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_cam"]
 radius = 0.25
@@ -273,7 +274,7 @@ script = ExtResource("18_inventory")
 mesh = SubResource("ArrayMesh_k13sg")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1969206868]
-shape = SubResource("BoxShape3D_srb8v")
+shape = SubResource("CylinderShape3D_body")
 
 [node name="Camera Pivot" type="Node3D" parent="." unique_id=1969206869]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
