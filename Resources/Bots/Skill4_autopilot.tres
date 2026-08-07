@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="BotSkill" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Bots/bot_skill.gd" id="1_botsk"]
+
+[resource]
+script = ExtResource("1_botsk")
+label = "LEGEND"
+blurb = "reads where every blade will be and walks between them. not a rung of the ladder — the campaign plays a level out with this and nothing else may pick it"
+think_interval = 0.14
+reaction_time = 0.02
+pace = 1.0
+mistake_chance = 0.0
+foresight = 240
+danger = 2
+danger_range = 4.2
+danger_lookahead = 0.9
+look_ahead_cells = 4
+blade_room = 2.2
+routes_around_blades = true
+sees_all_blades = true
+knows_objectives = true
+sight_range = 9999
+items = 2
+item_delay = 0.1
+item_detour = 0
+paint_route = 26
+plans_in_time = true
+plan_horizon = 34
+spread = 0.0
+spread_radius = 1

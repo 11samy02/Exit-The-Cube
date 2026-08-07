@@ -11,6 +11,12 @@ extends Node
 
 const SAVE_PATH := "user://save.cfg"
 
+## What a record holds while nobody has walked that level out on their own hands
+## yet. A level a CPU cleared has a stamp and an unlocked one after it, and these
+## two — the selection reads them and shows a dash instead of a number
+const NO_TIME := INF
+const NO_DEATHS := 9999
+
 ## Which campaign is being played
 enum Slot { SOLO, COOP }
 
@@ -35,8 +41,9 @@ var items_collected: int = 0
 var items_used: int = 0
 
 ## The best a level was ever cleared in, by its place in the campaign:
-## { "time": float, "deaths": int }. The two are kept apart on purpose, the
-## fastest way through a level is rarely also the cleanest one
+## { "time": float, "deaths": int, "helped": bool }. The two numbers are kept
+## apart on purpose, the fastest way through a level is rarely also the cleanest
+## one — and the flag says the only clear it ever got was one a CPU finished
 var records: Dictionary = {}
 
 ## Every slot that is not the one being played, by its enum value
@@ -94,6 +101,13 @@ func has_save() -> bool:
 ## What that level was ever cleared in at best, empty while it never was
 func record_of(index: int) -> Dictionary:
 	return records.get(index, {})
+
+
+## True while every clear that level ever got was one a CPU played out. Walking
+## it yourself takes the stamp back off — the mark is about the level still owing
+## you a clean run, not about ever having asked for a hand
+func was_helped(index: int) -> bool:
+	return bool(record_of(index).get("helped", false))
 
 
 ## How many levels of the campaign may be picked, counted from the front. Every
@@ -186,7 +200,8 @@ func _on_run_finished() -> void:
 	if not Levels.is_running():
 		return
 
-	_remember(Levels.index, GameState.level_time(), GameState.level_deaths())
+	_remember(Levels.index, GameState.level_time(), GameState.level_deaths(),
+		GameState.level_was_helped)
 
 	if Levels.index + 1 > level_index:
 		store(Levels.index + 1)
@@ -194,13 +209,27 @@ func _on_run_finished() -> void:
 		_write()
 
 
-## Keeps whichever of the two numbers this run beat
-func _remember(index: int, time: float, deaths_taken: int) -> void:
+## Keeps whichever of the two numbers this run beat, and whether the level still
+## owes the player a clear of their own.
+##
+## A run a CPU played out leaves both numbers exactly where they were. They are
+## the player's record of what they did with that level and nothing else belongs
+## in them — a time somebody watched somebody else set is not a best time, and
+## putting it there would quietly take the level's own record away from them.
+##
+## The stamp only survives a clear that was also helped. One run walked out on
+## the player's own hands takes it off for good, and it can never come back —
+## which is the whole point of it: it marks a level that has not been beaten yet,
+## not a level somebody once accepted help on
+func _remember(index: int, time: float, deaths_taken: int, helped: bool) -> void:
 	var record: Dictionary = records.get(index, {})
+	var best_time := float(record.get("time", INF))
+	var fewest := int(record.get("deaths", NO_DEATHS))
 
 	records[index] = {
-		"time": minf(time, float(record.get("time", INF))),
-		"deaths": mini(deaths_taken, int(record.get("deaths", 9999))),
+		"time": best_time if helped else minf(time, best_time),
+		"deaths": fewest if helped else mini(deaths_taken, fewest),
+		"helped": helped and bool(record.get("helped", true)),
 	}
 
 

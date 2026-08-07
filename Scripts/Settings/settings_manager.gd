@@ -172,6 +172,11 @@ var _extra_viewports: Array[Viewport] = []
 ## How many subtitles the game throws at the player while a level runs
 var commentary: int = COMMENTARY_HIGH
 
+## Whether the campaign may offer to play a level out for somebody it will not
+## let past. Turned off for good the first time the offer is refused: it is an
+## answer about how a player wants to be played at rather than about one run
+var autopilot_offer: bool = true
+
 ## Bus name to linear volume between 0 and 1
 var bus_volumes: Dictionary = {}
 
@@ -461,6 +466,13 @@ func set_commentary(value: int) -> void:
 	commentary_changed.emit()
 
 
+## Read the next time a level would ask, so a refusal takes hold on the spot and
+## outlives the run it was given in
+func set_autopilot_offer(enabled: bool) -> void:
+	autopilot_offer = enabled
+	_request_save()
+
+
 ## The camera reads these every frame, so nothing has to be told about a change
 func set_mouse_sensitivity(value: float) -> void:
 	mouse_sensitivity = clampf(value, MIN_SENSITIVITY, MAX_SENSITIVITY)
@@ -621,6 +633,7 @@ func save() -> void:
 	config.set_value("graphics", "splash_quality", splash_quality)
 	config.set_value("graphics", "split_layout", split_layout)
 	config.set_value("game", "commentary", commentary)
+	config.set_value("game", "autopilot_offer", autopilot_offer)
 	config.set_value("audio", "buses", bus_volumes)
 	config.set_value("input", "bindings", _bindings)
 	config.set_value("input", "mouse_sensitivity", mouse_sensitivity)
@@ -667,6 +680,7 @@ func _load() -> void:
 	splash_quality = clampi(int(config.get_value("graphics", "splash_quality", splash_quality)), SPLASH_OFF, SPLASH_HIGH)
 	split_layout = clampi(int(config.get_value("graphics", "split_layout", split_layout)), SPLIT_STACKED, SPLIT_SIDE_BY_SIDE)
 	commentary = clampi(int(config.get_value("game", "commentary", commentary)), COMMENTARY_OFF, COMMENTARY_HIGH)
+	autopilot_offer = bool(config.get_value("game", "autopilot_offer", autopilot_offer))
 	bus_volumes = config.get_value("audio", "buses", {})
 	_bindings = config.get_value("input", "bindings", {})
 	mouse_sensitivity = clampf(

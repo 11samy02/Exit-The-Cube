@@ -46,6 +46,28 @@ class_name PlayerCamera
 ## it, keeps a view that is already fine from being nudged around
 @export var clearance_tolerance: float = 0.4
 
+## Degrees per second the view swings around while something other than a person
+## is turning it. Well under what a hand can do: a camera that snapped onto every
+## change of mind would read as a machine driving rather than somebody playing
+@export var drive_turn_speed: float = 90.0
+
+## The angle a driven view settles at, and how fast it eases onto it.
+##
+## A person looking through this cube left the pitch wherever their last flick of
+## the mouse put it, which is fine while they are the one deciding what to look
+## at. Handed to a CPU it is nobody's choice at all — the view is simply stuck at
+## whatever angle the run happened to end on, and a level watched from the
+## floorboards or from straight overhead is a level you cannot read. So a driven
+## view walks onto one angle and holds it, and the whole of what moves after that
+## is the cube and the corridor it is in
+@export var drive_pitch: float = -18.0
+@export var drive_pitch_speed: float = 35.0
+
+## True while something other than a person turns this view, which is a cube the
+## game took over. The mouse and the stick are ignored for as long — two of them
+## steering one camera is a picture that shakes rather than a CPU to watch
+var driven: bool = false
+
 ## Distance the camera keeps when nothing is in the way, set by the perspective
 var desired_distance: float = 0.0
 
@@ -99,6 +121,9 @@ func _stand_down() -> void:
 
 
 func _process(delta: float) -> void:
+	if driven:
+		return
+
 	var look := Input.get_vector(
 		Seats.action(_seat, &"look_left"), Seats.action(_seat, &"look_right"),
 		Seats.action(_seat, &"look_up"), Seats.action(_seat, &"look_down"))
@@ -176,10 +201,33 @@ func _room_behind(space: PhysicsDirectSpaceState3D, candidate_yaw: float) -> flo
 	return maxf(reach * travel[0] - spring_arm.margin, 0.0)
 
 
+## Turns the view to look along that heading, a little at a time.
+##
+## What something driving this cube calls instead of moving the mouse. The yaw is
+## walked towards where the cube is going rather than snapped onto it, so a corner
+## reads as somebody turning the camera into it; the pitch is walked onto the one
+## angle a driven view holds and then left there. A heading of nothing at all is a
+## cube standing still, and the view stays exactly where it was for it — settling
+## the pitch is the only thing that carries on
+func look_along(heading: Vector3, delta: float) -> void:
+	if not driven or _idle:
+		return
+
+	pitch = move_toward(pitch, drive_pitch, drive_pitch_speed * delta)
+
+	if heading.length_squared() >= 0.0001:
+		var wanted := rad_to_deg(atan2(-heading.x, -heading.z))
+		var turn := wrapf(wanted - yaw, -180.0, 180.0)
+		var step := drive_turn_speed * delta
+		yaw += clampf(turn, -step, step)
+
+	_apply_rotation()
+
+
 ## Only the seat holding the mouse is turned by it. Without that the one mouse
 ## on the desk would swing all four cameras at once
 func _unhandled_input(event: InputEvent) -> void:
-	if Seats.count() > 1 and not Seats.uses_mouse(_seat):
+	if driven or (Seats.count() > 1 and not Seats.uses_mouse(_seat)):
 		return
 
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:

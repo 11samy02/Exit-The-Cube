@@ -95,6 +95,50 @@ const ALL_SEEING_REACH := 2.5
 ## maze it will not walk to rather than wait
 const BLADE_COST := 5.0
 
+## The most cells a timed plan may open up before it is settled with whatever it
+## has found. A maze is narrow and a plan reaches a few dozen cells across a
+## couple of dozen beats, so this is a ceiling and not a budget — it is only here
+## so that an open room cannot turn one think into a frame
+const PLAN_STATES := 6000
+
+## How far a blade may travel between two samples of it while a plan is laid, as
+## a share of a cell.
+##
+## The whole of what makes a plan trustworthy. A blade doing twelve covers two
+## cells in the time the cube covers one, so asking where it is once a beat hands
+## back two clear samples with a whole corridor swept in between — and a cube sent
+## through that gap walks into a saw the plan never knew was there. Well under
+## half a cell, so nothing can cross a corridor unrecorded
+const BLADE_SAMPLE := 0.4
+
+## How much further than the plan itself reaches a blade is still worth knowing
+## about, in meters. A patrol is a dozen cells at most, so a blade this far out
+## cannot have arrived anywhere the cube will be
+const PLAN_BLADE_MARGIN := 30.0
+
+## How near something that is chasing the cube counts as too near, in cells, and
+## how many cells of detour each of those is worth going out of the way for.
+##
+## A lean and not a wall, and the difference is the whole of how a hunter has to
+## be handled. Its own route is laid and gets shut off like any other blade's, but
+## where it will be after that is a question about where the cube goes next — so
+## the honest answer is a preference: everything else being equal, be further from
+## it than nearer. Shutting off everywhere it could reach instead was worse than
+## useless. A hunter is chasing the cube, so that circle is drawn around the cube
+## as often as not, and a plan that finds nowhere at all to stand answers with a
+## cube standing still — which is exactly what being chased must not produce
+const HUNTER_SHY := 6.0
+const HUNTER_DREAD := 3.0
+
+## The least of its own margin a plan may ever be squeezed down to.
+##
+## A saw's blade reaches about nine tenths of a meter and a cube is a metre and a
+## bit across the corners, so a metre and three quarters between the two middles
+## is already a touch. Whatever a plan gives up to get moving again, it does not
+## give up that — under here it would not be cutting it fine, it would be laying
+## a route through its own death
+const MIN_ROOM_SHARE := 0.82
+
 ## How long a bot may go without covering ground before it stops being careful,
 ## how far it has to have got in that time to count, and how long it stays
 ## reckless once it has given up
@@ -133,6 +177,10 @@ var _skill: BotSkill = null
 var _squad: BotSquad = null
 var _movement: PlayerMovement = null
 var _account: int = 0
+
+## What tells this brain apart from the same brain on the same cube in an earlier
+## attempt at the level. 0 in a round, where there are no earlier attempts
+var _salt: int = 0
 
 var _rng := RandomNumberGenerator.new()
 
@@ -188,6 +236,30 @@ var _progress_from := Vector3.ZERO
 var _progress_left: float = DESPERATE_AFTER
 var _desperate_left: float = 0.0
 
+## Seconds left of a run somebody asked this brain to make. Nothing in the ladder
+## ever sets it — see dash()
+var _barge_left: float = 0.0
+
+## The timed plan: which cell the cube means to be standing in on each beat from
+## the moment it was laid, and the clock it was laid at. Empty on every rung but
+## the legend one
+var _plan: Array[Vector2i] = []
+var _plan_at: float = 0.0
+
+## Where cell zero sits in the world and how wide a cell is, read once per plan.
+## The blade marking asks for a cell centre thousands of times over, and every one
+## of those used to be two calls into the grid
+var _grid_origin := Vector3.ZERO
+var _grid_span := 2.0
+
+## How much of the room it likes to keep around a blade this plan is insisting
+## on. 1 is the whole of it — see squeeze()
+var _room_share: float = 1.0
+
+## Where the blades that are chasing the cube stand, in cells, collected once per
+## plan. What the search leans away from rather than refusing to enter
+var _hunted: Array[Vector2] = []
+
 ## Seconds the thing in its slot has been sitting there
 var _item_held: float = 0.0
 
@@ -198,12 +270,21 @@ var _found_exit: bool = false
 
 
 ## Built by the spawner rather than living in the player scene, the same way the
-## ghost is: a cube nobody drives is the exception and not the rule
-static func attach_to(player: Player, skill: BotSkill) -> BotBrain:
+## ghost is: a cube nobody drives is the exception and not the rule.
+##
+## The salt is what makes one attempt at a level differ from the next. A brain
+## draws everything it is ever unsure about out of one generator seeded off the
+## account, which is right for a round — the CPUs in it lean differently and each
+## of them keeps its lean. It is exactly wrong for a level that is played again
+## after a death though: the maze is built from a fixed seed, so a brain given
+## the same numbers walks the identical route into the identical blade forever.
+## Whoever retries a level hands in something that has moved
+static func attach_to(player: Player, skill: BotSkill, salt: int = 0) -> BotBrain:
 	var made := BotBrain.new()
 	made.name = "Brain"
 	made.cube = player
 	made._skill = skill
+	made._salt = salt
 	player.add_child(made)
 	return made
 
@@ -214,7 +295,7 @@ func _ready() -> void:
 
 	_movement = cube.movement
 	_account = cube.account()
-	_rng.seed = _account * 7919 + 13
+	_rng.seed = _account * 7919 + 13 + _salt * 104729
 	_think_left = _rng.randf() * _skill.think_interval
 	_draw_turn_order()
 
@@ -246,6 +327,7 @@ func _physics_process(delta: float) -> void:
 
 	_clock += delta
 	_visited[_here()] = _clock
+	_barge_left = maxf(_barge_left - delta, 0.0)
 	_watch_for_stuck(delta)
 	_watch_for_progress(delta)
 
@@ -276,8 +358,16 @@ func _awake() -> bool:
 
 
 ## True while it has walked its route out or walked into something the route did
-## not know about, which are the two reasons to think early
+## not know about, which are the two reasons to think early.
+##
+## A plan is laid to the end of its horizon and then laid again, so running out
+## of it is not a surprise and neither is standing still — that is a beat it meant
+## to spend. Only a cube that is asking to move and is not moving has met
+## something none of it knew about
 func _at_a_loss() -> bool:
+	if _skill.plans_in_time:
+		return _stuck > STUCK_PATIENCE
+
 	return _step >= _route.size() or _stuck > STUCK_PATIENCE or _waited > BLOCK_PATIENCE
 
 
@@ -300,6 +390,9 @@ func _think() -> void:
 	if _route.size() < 2:
 		_goal = _anywhere()
 		_lay_route(_goal)
+
+	if _skill.plans_in_time:
+		_lay_timed_plan(_goal)
 
 
 ## Lays out the run of fresh floor in front of the cube, and says whether it
@@ -722,8 +815,381 @@ func _downhill(field: Array, from: Vector2i) -> Array[Vector2i]:
 ## was being judged against where a blade happens to be standing now, which says
 ## nothing about where it will be when the cube arrives
 func _weighs_blades(walked: int) -> bool:
-	return _skill.routes_around_blades and not _desperate() \
+	return _skill.routes_around_blades and not _desperate() and not _untouchable() \
 		and walked <= _skill.look_ahead_cells
+
+
+## Lays out where the cube means to stand on each beat from now, and falls back
+## to walking the plain route when there is nothing to plan against.
+##
+## This is the whole of the legend rung. Everything else in here reads the blades
+## as things to be near or not near right now; this reads them as things that are
+## somewhere else in two seconds, which is the difference between a corridor being
+## shut and a corridor being shut *at the moment you would be in it*. A maze whose
+## blades outrun the cube cannot be walked any other way — there is nowhere to
+## dodge to at a wall, and waiting one beat at the corner is the answer the rest
+## of the ladder has no way of even asking about
+func _lay_timed_plan(target: Vector2i) -> void:
+	_grid_span = _cell_span()
+	_grid_origin = _world_of(Vector2i.ZERO)
+	_plan = _search_in_time(target)
+	_plan_at = _clock
+
+	if _plan.size() < 2:
+		_plan = _route.slice(maxi(_step - 1, 0))
+
+
+## Seconds one beat of a plan lasts, which is what crossing one cell costs the
+## cube at the pace this rung walks at.
+##
+## It has to be the true crossing time and not a careful one. The follower drives
+## the cube at whatever speed it has, so a beat written down as longer than the
+## crossing really takes does not slow the cube — it only moves the whole plan
+## later than the cube actually arrives, which puts it in the gap before the gap
+## is open. Where the margin belongs is in what counts as a cell being free
+func _plan_beat() -> float:
+	return _cell_span() / maxf(_movement.max_speed * _skill.pace, 0.1)
+
+
+## Walks the maze out in cells and beats together, and hands back the best line
+## through it that was found.
+##
+## A plain flood fill and not a weighted search, because every move a cube can
+## make costs exactly one beat — a step to a neighbour and standing still are the
+## same beat, and standing still is a move like any other. That is the one thing
+## this has that a route through cells alone cannot express.
+##
+## A search that never once found a cell to step onto is a cube with a blade
+## coming and nowhere to be, and that is the one case the plan is not allowed to
+## answer with "stay where you are" — see _least_bad_step.
+##
+## Only a landmark is planned to. The key and the way out are the two cells the
+## level already measured itself from and keeps the sweep of, so the score of a
+## cell is a lookup; anywhere else would put a fresh sweep of the whole map into
+## the cache several times a second and push the two that matter back out of it
+func _search_in_time(target: Vector2i) -> Array[Vector2i]:
+	var nothing: Array[Vector2i] = []
+	if not _is_landmark(target):
+		return nothing
+
+	var walker := _squad.map_generator
+	var field := _squad.field_from(target)
+	if field.is_empty():
+		return nothing
+
+	var horizon := maxi(_skill.plan_horizon, 4)
+	var calendar := _blade_calendar(horizon)
+	var here := _here()
+
+	var start := Vector3i(here.x, here.y, 0)
+	var came_from: Dictionary = {}
+	var seen: Dictionary = {start: true}
+	var frontier: Array[Vector2i] = [here]
+	var opened := 0
+
+	var best := start
+	var best_score := walker.distance_in_field(field, here) + _hunter_cost(here)
+	var moved := false
+
+	for beat in range(horizon):
+		var next: Array[Vector2i] = []
+
+		for cell in frontier:
+			for step in _plan_moves():
+				var to: Vector2i = cell + step
+				if step != Vector2i.ZERO and not walker.is_path_cell(to):
+					continue
+
+				var key := Vector3i(to.x, to.y, beat + 1)
+				if seen.has(key) or _blade_due(calendar, to, beat + 1):
+					continue
+
+				seen[key] = true
+				came_from[key] = Vector3i(cell.x, cell.y, beat)
+				next.append(to)
+				opened += 1
+
+				if to != here:
+					moved = true
+
+				var score := walker.distance_in_field(field, to)
+				if score < 0:
+					continue
+
+				score += _hunter_cost(to)
+
+				if best_score < 0 or score < best_score:
+					best_score = score
+					best = key
+
+		if next.is_empty() or opened >= PLAN_STATES:
+			break
+
+		frontier = next
+
+	if not moved:
+		return [here, _least_bad_step(calendar, here)] as Array[Vector2i]
+
+	return _walk_back(came_from, best, here)
+
+
+## Which way to go when the search found nowhere safe at all.
+##
+## Standing still is the one answer that must not be given here. The search has
+## just said that every way out of this cell is spoken for, and the cell the cube
+## is standing in is very often one of them — a blade is on its way and this is
+## what being caught looks like from the inside. So the cube is sent to whichever
+## neighbour the blades reach last, which is the difference between a chance and
+## none. It stays put only where staying really is the last thing to be swept
+func _least_bad_step(calendar: Array, here: Vector2i) -> Vector2i:
+	var walker := _squad.map_generator
+	var best := here
+	var latest := _beats_until(calendar, here)
+
+	for step in _turn_order:
+		var to: Vector2i = here + step
+		if not walker.is_path_cell(to):
+			continue
+
+		var due := _beats_until(calendar, to)
+		if due > latest:
+			latest = due
+			best = to
+
+	return best
+
+
+## How many beats there are before a blade is due in that cell, counting from
+## then. The whole plan when none is
+func _beats_until(calendar: Array, cell: Vector2i, from: int = 0) -> int:
+	for beat in range(maxi(from, 0), calendar.size()):
+		if (calendar[beat] as Dictionary).has(cell):
+			return beat - from
+
+	return calendar.size()
+
+
+
+
+## The plan read back out of the search, oldest beat first. A search that found
+## nowhere better than where the cube already stands hands back the cube's own
+## cell twice, which the follower reads as standing still — and standing still is
+## an answer, it is what lets the blade in the corridor go by
+func _walk_back(came_from: Dictionary, last: Vector3i, here: Vector2i) -> Array[Vector2i]:
+	var plan: Array[Vector2i] = []
+	var key := last
+
+	while came_from.has(key):
+		plan.append(Vector2i(key.x, key.y))
+		key = came_from[key]
+
+	plan.append(Vector2i(key.x, key.y))
+	plan.reverse()
+
+	if plan.size() < 2:
+		return [here, here] as Array[Vector2i]
+
+	return plan
+
+
+## The five things a cube may do with one beat. Standing still comes first so it
+## is the move a tie falls back on: where two lines through the blades are equally
+## good, the one that has not committed the cube to a corridor is the better one
+func _plan_moves() -> Array[Vector2i]:
+	var moves: Array[Vector2i] = [Vector2i.ZERO]
+	moves.append_array(_turn_order)
+	return moves
+
+
+## Where every blade near the cube will be on each beat of the plan, as the cells
+## that are not worth being in at that moment.
+##
+## Worked out once per plan rather than per cell looked at. The search asks about
+## a few thousand cell-and-beat pairs and there can be forty blades in a level;
+## asking each of them where it will be, every time, is the same question answered
+## a hundred thousand times a second
+func _blade_calendar(horizon: int) -> Array:
+	var calendar: Array = []
+	var beat := _plan_beat()
+	var covered := _beats_of_cover(beat)
+
+	_hunted.clear()
+
+	for at in range(horizon + 1):
+		calendar.append({})
+
+	if _barge_left > 0.0 or covered > horizon:
+		return calendar
+
+	for mover in _plan_blades(horizon):
+		_mark_blade_route(calendar, mover, horizon, beat, covered)
+
+	return calendar
+
+
+## How many beats of the plan the cube cannot be hurt for.
+##
+## A shield or the rainbow makes a blade something to walk through rather than
+## around, and a plan that went on treating the maze as lethal spent the whole of
+## it standing at corners waiting for corridors it could have run straight down.
+## What is asked is how long the cover actually has left, not merely whether it
+## is up — the beats past the end of it are laid out against a maze that can kill
+## again, so the run does not end with the cube halfway down a swept corridor
+## with nothing left on it
+func _beats_of_cover(beat: float) -> int:
+	if cube.inventory == null or not cube.death.is_invulnerable or beat <= 0.0:
+		return 0
+
+	var longest := 0.0
+
+	for effect in cube.inventory.active_effects:
+		longest = maxf(longest, effect.time_left)
+
+	return int(floor(longest / beat))
+
+
+## Every blade worth planning around. Its own cull and not the rung's eyes: those
+## are set for reading a blade beside the cube right now, and a plan reaching ten
+## seconds out has to know about the one two corridors away that will have arrived
+## by the time the cube is there
+func _plan_blades(horizon: int) -> Array[SawMover]:
+	var found: Array[SawMover] = []
+	var at := cube.global_position
+	var reach := float(horizon) * _grid_span + PLAN_BLADE_MARGIN
+
+	for node in get_tree().get_nodes_in_group("saw_mover"):
+		var mover := node as SawMover
+		if mover == null or mover.parent == null or not mover.parent.visible:
+			continue
+
+		if _flat(at - mover.parent.global_position).length() <= reach:
+			found.append(mover)
+
+	return found
+
+
+## True for a blade that is being steered at the player rather than walking a
+## patrol of its own.
+##
+## It is worth planning around exactly as far as the route it is holding: those
+## cells are laid and it will walk them. What comes after is not a question about
+## the blade at all — it is a question about where the cube goes next, which is
+## the very thing the plan is still deciding — so the walk stops at the end of the
+## route and leaves it standing there, and the reflex covers what the plan cannot
+func _is_hunter(mover: SawMover) -> bool:
+	return mover.behavior == SawMover.Behavior.ONCE
+
+
+## Walks one blade forward through the whole plan and writes every cell it passes
+## through into the page of the beat it passes through it on.
+##
+## The walking itself is the blade's own — it is asked where it will be rather
+## than told. A prediction that lived here was a second copy of how a saw moves,
+## and it was missing the three things that most often put a cube into one: the
+## rest a patrol takes at each end, the way it eases off going into that turn and
+## back out of it, and the glide out of being frozen. Every one of those is a
+## corridor the plan called clear while the blade was still standing in it.
+##
+## And it is sampled far finer than a beat, because what is being written down is
+## the path the blade takes and not the places it happens to be looked at
+func _mark_blade_route(calendar: Array, mover: SawMover, horizon: int, beat: float,
+		covered: int) -> void:
+	var at: Vector3 = mover.parent.global_position
+
+	if _is_hunter(mover):
+		_hunted.append(_cell_point(at))
+
+	if covered <= 0:
+		_mark_blade(calendar[0], at, _planner_room())
+
+	var slices := _slices_per_beat(mover.speed * mover.speed_multiplier, beat)
+	var walk := mover.forecast(beat / float(slices), horizon * slices)
+
+	for sample in range(walk.size()):
+		var page := (sample + 1) / slices
+
+		if page >= covered and page < calendar.size():
+			_mark_blade(calendar[page], walk[sample], _planner_room())
+
+
+## What a cell costs on top of the walk, for being near something that is chasing
+## the cube. Nothing at all once the hunters are far enough off, which is most of
+## the maze most of the time
+func _hunter_cost(cell: Vector2i) -> int:
+	if _hunted.is_empty():
+		return 0
+
+	var cost := 0.0
+
+	for spot in _hunted:
+		var gap := Vector2(float(cell.x) - spot.x, float(cell.y) - spot.y).length()
+		if gap < HUNTER_SHY:
+			cost += (HUNTER_SHY - gap) * HUNTER_DREAD
+
+	return int(round(cost))
+
+
+## That spot in cells, fractions and all. The middle of a cell is a whole number
+func _cell_point(at: Vector3) -> Vector2:
+	return Vector2((at.x - _grid_origin.x) / _grid_span, (at.z - _grid_origin.z) / _grid_span)
+
+
+## How many times a blade has to be looked at inside one beat for its path to be
+## written down without gaps in it
+func _slices_per_beat(pace: float, beat: float) -> int:
+	return clampi(int(ceil(pace * beat / (_grid_span * BLADE_SAMPLE))), 1, 8)
+
+
+## Writes one blade's reach at one moment into that beat's page.
+##
+## All arithmetic and no grid. Which cell a spot is in and where a cell's middle
+## sits are both a division and a rounding once the corner of the grid and the
+## width of a cell are known, and this is called thousands of times per plan
+func _mark_blade(page: Dictionary, at: Vector3, room: float) -> void:
+	var spot := _cell_point(at)
+	var middle := Vector2i(roundi(spot.x), roundi(spot.y))
+	var reach := room / _grid_span
+	var around := int(floor(reach + 0.5))
+
+	for x in range(-around, around + 1):
+		for z in range(-around, around + 1):
+			var cell := middle + Vector2i(x, z)
+			if Vector2(float(cell.x) - spot.x, float(cell.y) - spot.y).length() <= reach:
+				page[cell] = true
+
+
+## True while a blade is due in that cell on that beat.
+##
+## One page and not two. A page already holds every cell its blades pass through
+## during that whole beat rather than the handful they happen to be sitting on at
+## the end of it, so asking the next one as well was the same margin counted
+## twice — and a maze with forty blades in it came out shut in both directions,
+## which is a cube that stands at a corner for half a minute rather than one that
+## is being careful
+func _blade_due(calendar: Array, cell: Vector2i, beat: int) -> bool:
+	if beat < 0 or beat >= calendar.size():
+		return false
+
+	return (calendar[beat] as Dictionary).has(cell)
+
+
+## Which way the plan wants the cube to be going right now, and nothing at all on
+## a beat it means to spend standing where it is.
+##
+## The cell after the next one is deliberately not looked at. Reaching a cell
+## early and carrying straight on into the following one is the cube arriving in
+## a corridor before the beat the plan cleared it for — which is the one thing
+## this whole rung exists to stop
+func _plan_direction() -> Vector3:
+	var beat := _plan_beat()
+	var at := int((_clock - _plan_at) / beat) if beat > 0.0 else 0
+	var want: Vector2i = _plan[clampi(at + 1, 0, _plan.size() - 1)]
+	var to := _flat(_world_of(want) - cube.global_position)
+
+	if to.length() < CELL_REACH * 0.5:
+		return Vector3.ZERO
+
+	return to.normalized()
 
 
 func _step_down(field: Array, cell: Vector2i, walked: int, seen: Dictionary) -> Vector2i:
@@ -770,6 +1236,20 @@ func _aim() -> Vector3:
 ## thing go by, and how far down its own route it looks is the rung
 func _dodge_or_go() -> Vector3:
 	var wanted := _route_direction()
+
+	if _skill.plans_in_time and not _plan.is_empty():
+		_blocked = false
+		var hunted := _dodge_hunters()
+		var chased := minf(hunted.length(), 1.0)
+
+		if chased >= FLEE_FORCE:
+			return hunted.normalized() * _skill.pace
+
+		if chased > 0.01:
+			return (wanted + hunted * DODGE_WEIGHT).limit_length(1.0) * _skill.pace
+
+		return wanted.limit_length(1.0) * _skill.pace
+
 	var push := _dodge()
 	var force := minf(push.length(), 1.0)
 	var escape := push.normalized() if force > 0.01 else Vector3.ZERO
@@ -826,7 +1306,7 @@ func _read_blades() -> void:
 ## then holding still for a cell the cube does not reach for three, is what had
 ## the bots waiting out corridors that were never going to be in their way
 func _blocked_ahead() -> bool:
-	if _skill.look_ahead_cells <= 0 or _near.is_empty() or _desperate():
+	if _skill.look_ahead_cells <= 0 or _near.is_empty() or _desperate() or _untouchable():
 		return false
 
 	var pace := maxf(_movement.max_speed * _skill.pace, 0.1)
@@ -896,6 +1376,9 @@ func _route_direction() -> Vector3:
 	if _boarding():
 		return _flat(_world_of(_squad.elevator_spawner.current_elevator_cell) - at).normalized()
 
+	if _skill.plans_in_time and not _plan.is_empty():
+		return _plan_direction()
+
 	while _step < _route.size() \
 			and _flat(_world_of(_route[_step]) - at).length() < CELL_REACH:
 		_step += 1
@@ -916,9 +1399,94 @@ func _boarding() -> bool:
 	return door.x >= 0 and Vector2(_here() - door).length() <= 1.5
 
 
+## Cuts it that much finer around the blades from here on, 1 being the room the
+## rung would rather have.
+##
+## The margin a plan keeps is not one number that is right everywhere. Wide is
+## flawless in an early maze with four blades in it and shuts a late one solid —
+## forty patrols, every corridor spoken for on every beat, and a cube that stands
+## at a corner because there is no line through the maze that clears the bar it
+## set itself. So the bar is what gives first: whoever is driving watches whether
+## the cube is getting anywhere and pulls this down a notch when it is not, well
+## before the last resort of walking through the blades. It is still never pulled
+## under what actually kills a cube
+func squeeze(share: float) -> void:
+	_room_share = clampf(share, MIN_ROOM_SHARE, 1.0)
+
+
+## The room this plan keeps around a blade, which is the rung's own less whatever
+## has been given up to get moving again
+func _planner_room() -> float:
+	return _skill.blade_room * _room_share
+
+
+## Takes the corridor rather than waiting at the mouth of it, for that long.
+##
+## A brain on its own never does this. Its answer to a blade in the way is to
+## stand and let it go by, which is right in a race — but a maze corridor is one
+## cell wide, and where the only way on is past a patrol that never clears, "wait"
+## and "go round" are both nothing and the cube spends the level shuffling between
+## the two. Whoever is driving this brain can see that from the outside, and this
+## is what it says about it: stop backing away, walk the route, take the chance.
+##
+## It really is a chance. The cube can be cut in half doing this and regularly is
+func dash(seconds: float) -> void:
+	_barge_left = maxf(_barge_left, seconds)
+	_desperate_left = maxf(_desperate_left, seconds)
+	_detour = false
+	_think()
+
+
+## The same push, but only from the blades that are chasing the cube.
+##
+## What a plan cannot hold. Everything else in the maze walks a line that was laid
+## before the cube got there and is written into the plan beat by beat; a hunter
+## is aimed at wherever the cube is going, so the only thing that answers it is
+## the reflex — lean away, and keep walking the plan while doing it
+## True while nothing in the maze can cut this cube in half.
+##
+## A shield or the rainbow is a moment to spend running down the corridors that
+## were shut a second ago, and a bot that went on stepping around them politely
+## has paid for an item it then did not use. Walking through is a play the game
+## already expects, too: both effects check whether the cube is still standing
+## inside a blade when they run out and finish the job if it is
+func _untouchable() -> bool:
+	return cube.death.is_invulnerable
+
+
+func _dodge_hunters() -> Vector3:
+	if _untouchable():
+		return Vector3.ZERO
+
+	var push := Vector3.ZERO
+	var at := cube.global_position
+	var reach := _skill.danger_range
+
+	for index in range(mini(_near.size(), _threats.size())):
+		if not _is_hunter(_near[index]):
+			continue
+
+		var away := _flat(at - _threats[index])
+		var gap := away.length()
+
+		if gap >= reach or gap < 0.001:
+			continue
+
+		push += away / gap * (1.0 - gap / reach)
+
+	return push
+
+
 ## What every blade close enough to matter adds up to, as a push away from where
-## it is going to be. What "close enough" and "going to be" mean is the rung
+## it is going to be. What "close enough" and "going to be" mean is the rung.
+##
+## None of it during a run somebody asked for: the push and the route are opposite
+## directions in a corridor, and a run that is still being leaned out of is the
+## same shuffle it was called to end
 func _dodge() -> Vector3:
+	if _barge_left > 0.0 or _untouchable():
+		return Vector3.ZERO
+
 	var push := Vector3.ZERO
 	var at := cube.global_position
 	var reach := _skill.danger_range

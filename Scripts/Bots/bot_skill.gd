@@ -104,6 +104,25 @@ enum Items {
 ## yet, and this is how far ahead it lays one out
 @export var paint_route: int = 12
 
+@export_group("Legend")
+
+## Whether it works out where the blades will be and lays a route through the
+## gaps between them, standing still where standing still is what gets it past,
+## instead of reading the ones near it and leaning away.
+##
+## Off on every rung of the ladder, and meant to stay off. It is not a harder
+## CPU to race, it is a different thing entirely: a race is somebody to beat and
+## a rung that reads the maze one blade at a time is what makes that a game. The
+## campaign turns it on for the one cube it plays out for a player who has had
+## enough of a level, and nothing else in the game may
+@export var plans_in_time: bool = false
+
+## How many beats of one such plan are worked out, a beat being the time the cube
+## takes to cross one cell. Past about this far ahead a blade's own route has
+## turned corners the prediction cannot follow, so planning further is planning
+## against a maze that will not be there
+@export var plan_horizon: int = 26
+
 @export_group("Teamwork")
 
 ## How hard a team mate's patch of the map pushes this one off it. 0 leaves four

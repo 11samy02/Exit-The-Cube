@@ -39,6 +39,24 @@ var is_running: bool = false
 var level_start_time: float = 0.0
 var level_start_deaths: int = 0
 
+## True once a CPU was put on the level that is being played. It belongs to the
+## level rather than to the run: it survives a rebuild the way the death tally
+## does, and it is wiped as soon as another level is opened. What reads it is the
+## save, which stamps a level that was not cleared on the player's own
+var level_was_helped: bool = false
+
+## True while a CPU is meant to be driving this level, which is not the same
+## question. The stamp above is about the level's history and never comes off
+## once it is on; this is about right now, and a player who took the cube back off
+## the CPU turns it off — otherwise the next death would hand it straight over
+## again, which is the game arguing with somebody who has said what they want
+var level_cpu_driving: bool = false
+
+## The highest death count this level has already made the offer at. The offer is
+## made again as things get worse rather than once and never, so this is what
+## keeps each of those marks to a single asking
+var level_offer_mark: int = 0
+
 ## The view the player last switched to. A death reloads the scene and a fresh
 ## player would come up in third person every time, so which way the cube was
 ## being looked through is kept out here where the reload cannot reach it. It
@@ -63,6 +81,9 @@ func start_run() -> void:
 	is_running = true
 	level_start_time = 0.0
 	level_start_deaths = 0
+	level_was_helped = false
+	level_cpu_driving = false
+	level_offer_mark = 0
 	DeathMarks.clear()
 	death_count_changed.emit(deaths)
 
@@ -132,3 +153,6 @@ func begin_level(new_level: MapData) -> void:
 	if opened_another:
 		level_start_time = run_time
 		level_start_deaths = deaths
+		level_was_helped = false
+		level_cpu_driving = false
+		level_offer_mark = 0
