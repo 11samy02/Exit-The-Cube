@@ -235,6 +235,15 @@ var pad_device: int = Device.GENERIC
 ## on screen
 var active_device: int = Device.KEYBOARD
 
+## True once somebody has actually reached for a keyboard or a mouse.
+##
+## Until they have, a pad that is plugged in is what the prompts are drawn for.
+## The old rule was that the prompts only ever changed once a pad button had been
+## pressed, which is fine at a desk where the keyboard is the thing in front of
+## you — and wrong on a handheld, where the controls are part of the screen and
+## there is no keyboard to have used. It told a Steam Deck to press Enter
+var _used_keyboard: bool = false
+
 ## What brand each connected pad is, by its joypad number. The single pad_device
 ## above is still what a menu draws with — a menu is used by one person at a time
 ## — but a split screen has a HUD per seat and each of them shows its own pad
@@ -262,6 +271,7 @@ func _input(event: InputEvent) -> void:
 		device = pad_device
 	elif event is InputEventKey or event is InputEventMouseButton:
 		device = Device.KEYBOARD
+		_used_keyboard = true
 	else:
 		return
 
@@ -350,14 +360,15 @@ func _refresh_pad() -> void:
 	if not pads.is_empty():
 		detected = int(_brand_by_device[pads[0]])
 
-	if detected == pad_device:
-		return
-
+	var was_active := active_device
+	var was_pad := pad_device
 	pad_device = detected
-	if active_device != Device.KEYBOARD:
+
+	if active_device != Device.KEYBOARD or (not _used_keyboard and not pads.is_empty()):
 		active_device = pad_device
 
-	device_changed.emit(active_device)
+	if active_device != was_active or pad_device != was_pad:
+		device_changed.emit(active_device)
 
 
 func _on_joy_connection_changed(_device: int, _connected: bool) -> void:
@@ -366,11 +377,31 @@ func _on_joy_connection_changed(_device: int, _connected: bool) -> void:
 
 func _detect(joy_name: String) -> int:
 	var lowered := joy_name.to_lower()
+	var found := Device.GENERIC
+
 	for entry in DEVICE_KEYWORDS:
 		if lowered.contains(entry[0]):
-			return entry[1]
+			found = entry[1]
+			break
 
-	return Device.GENERIC
+	return Device.STEAM_DECK if _handheld_glyphs(found) else found
+
+
+## True while the pad that was found should be drawn as the handheld's own.
+##
+## Steam hands a game its controls through a virtual pad, and that pad does not
+## say "Steam Deck" — it reports itself as an Xbox 360 controller, which is the
+## layout every game already understands. So the machine is what has to be asked
+## rather than the driver: on a Deck, a pad that came through as generic or as an
+## Xbox one is the Deck itself and gets its own glyphs.
+##
+## A PlayStation or a Switch pad is left alone. Those names survive the trip, so
+## a pad somebody actually plugged in is still drawn as what it is
+func _handheld_glyphs(found: int) -> bool:
+	if found != Device.GENERIC and found != Device.XBOX:
+		return false
+
+	return OS.get_environment("SteamDeck") == "1"
 
 
 ## An unknown pad borrows the Xbox glyph names, its own folder holds no face
