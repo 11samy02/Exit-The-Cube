@@ -268,6 +268,10 @@ func _build_header() -> Control:
 	return inset
 
 
+## The panel's own way into spectating, which is the window's and therefore only
+## any use while the window is one picture. A split screen has a player per piece
+## of it who may be out of the maze while the others are not, and each of them is
+## offered the same thing in their own half — see SeatResult
 func _build_buttons() -> Control:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -516,7 +520,8 @@ func _draw_panel(standings: Array) -> void:
 		for runner: Dictionary in standings:
 			_panel_rows.add_child(_build_panel_row(runner))
 
-	_spectate_button.visible = Match.anyone_running() and not Match.is_painting()
+	_spectate_button.visible = Match.anyone_running() and not Match.is_painting() \
+		and not Match.is_split()
 	_lobby_button.visible = true
 	_lobby_button.text = "BACK TO LOBBY" if Match.kind == Match.Kind.ONLINE else "BACK TO TITLE"
 	_lobby_note.text = _lobby_hint()

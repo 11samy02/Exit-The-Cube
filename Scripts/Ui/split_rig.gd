@@ -13,6 +13,10 @@ extends CanvasLayer
 ## rather than once per split, which is what they are for. What genuinely belongs
 ## to one player goes into that split's own HUD instead
 
+## Put in a group so a seat that is out of the maze can find the piece of the
+## window it should be pointing somewhere else, without a path to it
+const GROUP := &"split_rig"
+
 ## Under the game UI, so every existing overlay still covers the whole window
 const RIG_LAYER := -1
 
@@ -26,6 +30,14 @@ var _cameras: Array[SplitCamera] = []
 var _huds: Array[SeatHud] = []
 var _frames: Array[Panel] = []
 
+## A camera each split is looking through instead of its own player's, null for
+## every seat that is still running its own cube
+var _watched: Array[Camera3D] = []
+
+## The cube camera each HUD was last bound to, so a rebuilt player is noticed
+## even while that seat is off watching somebody else
+var _bound: Array[Camera3D] = []
+
 ## The camera that holds the window itself, see _park_window_camera
 var _parked: Camera3D = null
 
@@ -33,6 +45,7 @@ var _parked: Camera3D = null
 func _ready() -> void:
 	layer = RIG_LAYER
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	add_to_group(GROUP)
 
 	_build()
 	_lay_out()
@@ -54,18 +67,36 @@ func _exit_tree() -> void:
 
 ## The cube of a seat is not there on the frame a death rebuilt the map, and it
 ## is a different node after a respawn, so the source is looked up rather than
-## held on to
+## held on to.
+##
+## What the split draws is not always that cube though. A player who has ridden
+## the lift out is standing at the top of a shaft with the lights off, and what
+## they asked to look at is somebody else — so a camera they were handed wins over
+## their own, while the HUD behind it goes on tracking the cube either way
 func _process(_delta: float) -> void:
 	for at in range(_cameras.size()):
 		var player := Player.at_seat(get_tree(), at)
 		if player == null or not is_instance_valid(player.view):
 			continue
 
-		if _cameras[at].source != player.view:
-			_cameras[at].source = player.view
+		if _bound[at] != player.view:
+			_bound[at] = player.view
 			_huds[at].bind(at)
 
+		_cameras[at].source = _watched[at] if is_instance_valid(_watched[at]) else player.view
 		player.view.current = false
+
+
+## Points one split at a camera that is not its player's own, or at nothing to
+## hand the view back.
+##
+## A split is never told which camera is current the way a window is. Its piece
+## holds a camera of its own that copies a source every frame, so this is the one
+## thing that has to change — and the cube's own rig, which is still writing that
+## camera's pose, is left completely alone by it
+func watch_through(at: int, camera: Camera3D) -> void:
+	if at >= 0 and at < _watched.size():
+		_watched[at] = camera
 
 
 func _build() -> void:
@@ -136,6 +167,11 @@ func _build_split(at: int) -> void:
 	hud.seat = at
 	view.add_child(hud)
 
+	var result := SeatResult.new()
+	result.name = "SeatResult"
+	result.seat = at
+	view.add_child(result)
+
 	var frame := Panel.new()
 	frame.name = "Frame"
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -147,6 +183,8 @@ func _build_split(at: int) -> void:
 	_cameras.append(camera)
 	_huds.append(hud)
 	_frames.append(frame)
+	_watched.append(null)
+	_bound.append(null)
 
 
 ## A hollow box in the seat's colour, so the border says whose half is whose
@@ -164,7 +202,8 @@ func _frame_style(at: int) -> StyleBoxFlat:
 ## The aspect a camera keeps is part of the layout rather than a setting of its
 ## own: a wide, short strip that holds its height crops the sides away and turns
 ## a corridor into a slot, and a tall narrow one that holds its width does the
-## same the other way round
+## same the other way round. The angle itself is a vertical one, so a split told
+## to keep its width converts it — see SplitCamera._fitted_fov
 func _lay_out() -> void:
 	var rects := _rects()
 

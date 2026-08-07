@@ -400,8 +400,13 @@ func _fly_up(riders: Array) -> void:
 ## The run is over. Stopping the clock puts the summary up, what happens to the
 ## map after that is up to whichever button the player presses there.
 ##
-## A local race ends one cube's run rather than the level: the others are still
-## in the maze and the cabin has to go back down for them
+## A local race ends one cube's run rather than the level: the others are still in
+## the maze, and whether anything has to be done about that depends on whose lift
+## this was. One the whole room shares goes back down for the next player. One that
+## belongs to a single seat has carried the only cube it will ever answer to and
+## stays exactly where it stopped — sending it back would drop it out from under
+## the player standing in it, which on their half of the screen is the level
+## rebuilding itself around a race they had just won
 func _win(riders: Array) -> void:
 	await get_tree().create_timer(summary_delay).timeout
 
@@ -414,10 +419,11 @@ func _win(riders: Array) -> void:
 		if cube != null:
 			Match.finish(cube.account(), _arrival_of(cube))
 
-	_return()
+	if seat < 0:
+		_return()
 
 
-## Brings the cabin back down for whoever is still running.
+## Brings a shared cabin back down for whoever is still running.
 ##
 ## The hole in the roof stays open. Putting the blocks back would be wrong twice
 ## over: the next cube needs the same shaft, and the one already out of the maze

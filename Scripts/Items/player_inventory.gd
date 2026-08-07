@@ -41,7 +41,13 @@ func _ready() -> void:
 		set_process_unhandled_input(false)
 
 
+## A cube that is already out of the maze spends nothing. Its player is reading a
+## result and reaching for the same button to start watching the others with, and
+## an item thrown by somebody who has finished is one nobody sees land
 func _unhandled_input(event: InputEvent) -> void:
+	if _cube != null and Match.showing_results(_cube.account()):
+		return
+
 	if event.is_action_pressed(Seats.action(_seat, &"use_item")):
 		use()
 

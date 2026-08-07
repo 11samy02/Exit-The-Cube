@@ -10,9 +10,10 @@ extends Node3D
 ## a cube was, this slides its ghost there over the next few frames, and that is
 ## the whole of it.
 ##
-## The spectator camera lives here as well. Once the elevator has carried the
-## local cube out, the ghosts are the only thing left worth looking at, and they
-## are already standing in the right places
+## The spectator cameras are kept here as well. Once the elevator has carried a
+## cube out, whoever is still running is the only thing left worth looking at, and
+## this is the node that knows where all of them are — online as drawings it keeps
+## itself, on one screen as the cubes in the maze
 
 ## Put into a group so the race panel can reach the camera without a path
 const GROUP := &"ghost_field"
@@ -54,30 +55,6 @@ const DEATH_BURST := 1.9
 const DEATH_TIME := 0.35
 const SPAWN_TIME := 0.3
 
-## How far out the spectator camera starts, and how far it may be pushed
-const WATCH_DISTANCE := 9.0
-const WATCH_NEAR := 2.5
-const WATCH_FAR := 34.0
-
-## Where it starts looking from, in degrees, and how far it may be tilted
-const WATCH_PITCH := -22.0
-const WATCH_PITCH_LIMITS := Vector2(-85.0, 40.0)
-
-## How far above the cube the camera aims
-const WATCH_HEIGHT := 0.8
-
-## Degrees a second at full stick, and degrees per pixel of mouse drag
-const WATCH_TURN := 150.0
-const WATCH_DRAG := 0.22
-
-## Units the wheel and the stick move the camera in and out by
-const WATCH_ZOOM_STEP := 1.6
-const WATCH_ZOOM_RATE := 12.0
-
-## How quickly the point it orbits catches up to the cube. The angle is the
-## watcher's own and is never smoothed, only the spot it swings around
-const WATCH_SPEED := 8.0
-
 ## One node per cube, by the account it belongs to
 var _ghosts: Dictionary = {}
 
@@ -85,36 +62,17 @@ var _ghosts: Dictionary = {}
 ## it there makes ten packets a second read as ten jumps a second
 const SAW_FOLLOW := 0.35
 
-## The account being watched, 0 while the player is playing rather than looking
-var _watching: int = 0
-
 ## Blades whose own movement is switched off because a watched player is
 ## reporting where they are, by their place in the spawn order
 var _held_saws: Dictionary = {}
 
-var _camera: Camera3D = null
-
-## Where the watcher has put the camera: the way it looks around whoever is
-## being followed, and how far out it sits. It is theirs and not the cube's —
-## being locked behind somebody else's shoulder is not watching, it is riding
-var _watch_yaw: float = 0.0
-var _watch_pitch: float = WATCH_PITCH
-var _watch_distance: float = WATCH_DISTANCE
-
-## The spot the camera swings around, eased so a hopping cube does not shake it
-var _watch_pivot := Vector3.ZERO
-
-## True while a mouse button is held, which is what turns a drag into a turn.
-## The buttons of the panel underneath have to keep working, so the mouse is
-## never captured for this
-var _dragging: bool = false
+## The cameras handed out so far, by the seat looking through each. -1 is the one
+## a whole window shares
+var _cams: Dictionary = {}
 
 
 func _ready() -> void:
 	add_to_group(GROUP)
-	_camera = Camera3D.new()
-	_camera.current = false
-	add_child(_camera)
 
 
 func _process(delta: float) -> void:
@@ -130,7 +88,28 @@ func _process(delta: float) -> void:
 		_update_ghost(id, runners[id], delta)
 
 	_drop_gone_ghosts()
-	_move_camera(delta)
+
+	if Match.transport != null and watching() != 0:
+		_sync_watched_saws(watching())
+
+
+## The camera that seat watches through, built the first time it is asked for.
+##
+## The window's own is seat -1, and online that is the only one there will ever be
+## — one machine, one player, one view to take away from them. A split screen adds
+## one per seat: four cubes can be out of the maze at four different moments, each
+## following somebody else through their own piece of the window
+func cam_for(at: int = -1) -> SpectatorCam:
+	if _cams.has(at):
+		return _cams[at]
+
+	var made := SpectatorCam.new()
+	made.name = "SpectatorCam%d" % at
+	made.seat = at
+	made.field = self
+	add_child(made)
+	_cams[at] = made
+	return made
 
 
 ## A ghost is on the map while its cube has sent a position, is still alive and
@@ -317,25 +296,10 @@ func _drop_gone_ghosts() -> void:
 			_ghosts.erase(id)
 
 
-## Whoever can be watched right now: everybody still walking around in the maze,
-## in the order they are ranked
-func watchable() -> Array:
-	var found: Array = []
-
-	for runner in Match.standings():
-		if Match.is_mine(int(runner["id"])):
-			continue
-
-		if not bool(runner["finished"]) and bool(runner["placed"]):
-			found.append(runner)
-
-	return found
-
-
 ## The thing in the level that stands for that account: online it is the drawing
 ## this node keeps, and in a race on one screen it is the cube itself. Nothing
-## else here has to know which of the two it is looking at
-func _body_of(account: int) -> Node3D:
+## that follows a cube has to know which of the two it is looking at
+func body_of(account: int) -> Node3D:
 	var ghost: Node3D = _ghosts.get(account, null)
 	if ghost != null and ghost.visible:
 		return ghost
@@ -344,52 +308,19 @@ func _body_of(account: int) -> Node3D:
 	return Player.at_seat(get_tree(), seat) if seat >= 0 else null
 
 
+## What the window's own camera is following, for the race panel. A seat on a
+## split screen asks its own camera instead — see cam_for
 func watching() -> int:
-	return _watching
+	return cam_for().watching()
 
 
-## Takes the view off the player and puts it behind that cube. The camera is not
-## parented to the ghost, it follows it: a camera bolted to a hopping cube hops
-## with it and is unwatchable within seconds
-func watch(account: int) -> void:
-	var body := _body_of(account)
-	if body == null:
-		return
-
-	_watching = account
-	_watch_pivot = body.global_position + Vector3.UP * WATCH_HEIGHT
-	_camera.global_position = _watch_pivot + _watch_arm()
-	_camera.look_at(_watch_pivot)
-	_camera.make_current()
-
-
-## Steps to the next or the previous cube that is still in the maze
 func watch_step(direction: int) -> void:
-	var options := watchable()
-	if options.is_empty():
-		_watching = 0
-		return
-
-	for i in range(options.size()):
-		if int(options[i]["id"]) == _watching:
-			watch(int(options[wrapi(i + direction, 0, options.size())]["id"]))
-			return
-
-	watch(int(options[0]["id"]))
+	cam_for().watch_step(direction)
 
 
-## Hands the view back to the player's own camera
 func stop_watching() -> void:
-	_watching = 0
-	_dragging = false
+	cam_for().stop()
 	_release_saws()
-
-	if Match.is_split():
-		return
-
-	var cube := Player.at_seat(get_tree(), 0)
-	if cube != null and is_instance_valid(cube.view):
-		cube.view.make_current()
 
 
 ## Puts the blades where the watched player sees them.
@@ -403,9 +334,9 @@ func stop_watching() -> void:
 ##
 ## The movers are switched off while this runs, otherwise the local simulation
 ## and the packets fight over the same node every frame
-func _sync_watched_saws() -> void:
+func _sync_watched_saws(account: int) -> void:
 	var spawner := get_tree().get_first_node_in_group(&"saw_spawner") as SawSpawner
-	var runner: Dictionary = Match.runners().get(_watching, {})
+	var runner: Dictionary = Match.runners().get(account, {})
 
 	if spawner == null or runner.is_empty():
 		return
@@ -446,86 +377,3 @@ func _hold_saw(saw: Node3D, held: bool) -> void:
 		if child is SawMover or child is SawAi:
 			(child as Node).set_process(not held)
 			(child as Node).set_physics_process(not held)
-
-
-## Trails the watched cube from behind and above, and drops the whole thing when
-## that cube dies, finishes or drops off the network
-func _move_camera(delta: float) -> void:
-	if _watching == 0:
-		return
-
-	if Match.transport != null:
-		_sync_watched_saws()
-
-	var body := _body_of(_watching)
-	var runner: Dictionary = Match.runners().get(_watching, {})
-
-	if body == null or runner.is_empty() or bool(runner["finished"]) or not bool(runner["placed"]):
-		watch_step(1)
-		return
-
-	_read_watch_input(delta)
-
-	var aim := body.global_position + Vector3.UP * WATCH_HEIGHT
-	_watch_pivot = _watch_pivot.lerp(aim, minf(WATCH_SPEED * delta, 1.0))
-	_camera.global_position = _watch_pivot + _watch_arm()
-	_camera.look_at(_watch_pivot)
-
-
-## Where the camera sits relative to the spot it is orbiting
-func _watch_arm() -> Vector3:
-	var yaw := deg_to_rad(_watch_yaw)
-	var pitch := deg_to_rad(_watch_pitch)
-	var flat := cos(pitch) * _watch_distance
-
-	return Vector3(sin(yaw) * flat, -sin(pitch) * _watch_distance, cos(yaw) * flat)
-
-
-## The stick, every frame. The mouse comes in as events instead, and the base
-## actions are read rather than a seat's own — whoever is spectating has the
-## whole window by then, so there is no seat left to be
-func _read_watch_input(delta: float) -> void:
-	var look := Input.get_vector(&"look_left", &"look_right", &"look_up", &"look_down")
-
-	if look != Vector2.ZERO:
-		_turn_by(look.x * WATCH_TURN * delta * Settings.controller_sensitivity,
-			look.y * WATCH_TURN * delta * Settings.controller_sensitivity)
-
-	var push := Input.get_axis(&"move_forward", &"move_back")
-	if not is_zero_approx(push):
-		_zoom_by(push * WATCH_ZOOM_RATE * delta)
-
-
-func _turn_by(yaw: float, pitch: float) -> void:
-	_watch_yaw = wrapf(_watch_yaw - yaw, -180.0, 180.0)
-	_watch_pitch = clampf(_watch_pitch - pitch, WATCH_PITCH_LIMITS.x, WATCH_PITCH_LIMITS.y)
-
-
-func _zoom_by(step: float) -> void:
-	_watch_distance = clampf(_watch_distance + step, WATCH_NEAR, WATCH_FAR)
-
-
-## Turning with the mouse, but only while a button is held. The standings and
-## the two arrows are sitting underneath and have to stay clickable, so the
-## pointer is never taken away
-func _unhandled_input(event: InputEvent) -> void:
-	if _watching == 0:
-		return
-
-	if event is InputEventMouseButton:
-		var button := event as InputEventMouseButton
-
-		match button.button_index:
-			MOUSE_BUTTON_WHEEL_UP:
-				if button.pressed:
-					_zoom_by(-WATCH_ZOOM_STEP)
-			MOUSE_BUTTON_WHEEL_DOWN:
-				if button.pressed:
-					_zoom_by(WATCH_ZOOM_STEP)
-			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT:
-				_dragging = button.pressed
-
-	elif event is InputEventMouseMotion and _dragging:
-		var moved := (event as InputEventMouseMotion).relative
-		_turn_by(moved.x * WATCH_DRAG * Settings.mouse_sensitivity,
-			moved.y * WATCH_DRAG * Settings.mouse_sensitivity)
