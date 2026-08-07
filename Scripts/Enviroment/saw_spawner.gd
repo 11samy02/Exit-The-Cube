@@ -209,7 +209,7 @@ func _build_ai_saw(plan: Dictionary, seat: int) -> void:
 
 	var mover: SawMover = _find_saw_mover(saw)
 	if mover != null:
-		mover.speed = float(plan["speed"])
+		mover.speed = brain.fair_speed(float(plan["speed"]))
 		_hand_to_seat(saw, mover, seat)
 
 	brain.setup(map_generator, plan["start"] as Vector2i, int(plan["seed"]))
