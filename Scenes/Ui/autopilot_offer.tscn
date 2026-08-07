@@ -43,6 +43,7 @@ outline_color = Color(0.016, 0.004, 0.043, 0.8)
 [node name="AutopilotOffer" type="CanvasLayer" unique_id=1961932443]
 layer = 70
 script = ExtResource("1_offer")
+offer_at_deaths = Array[int]([10, 25, 100])
 
 [node name="Root" type="Control" parent="." unique_id=1677757786]
 unique_name_in_owner = true

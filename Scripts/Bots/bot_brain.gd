@@ -132,12 +132,19 @@ const HUNTER_DREAD := 3.0
 
 ## The least of its own margin a plan may ever be squeezed down to.
 ##
-## A saw's blade reaches about nine tenths of a meter and a cube is a metre and a
-## bit across the corners, so a metre and three quarters between the two middles
-## is already a touch. Whatever a plan gives up to get moving again, it does not
-## give up that — under here it would not be cutting it fine, it would be laying
-## a route through its own death
-const MIN_ROOM_SHARE := 0.82
+## Worked back from the two colliders and nothing else: a blade reaches 0.93 and
+## the cube 0.56, so the two are touching at 1.49 between their middles. This is
+## a little over that against a blade_room of 2.2 — the last of the room a plan
+## may give up to get moving, and never a route laid through its own death.
+##
+## It used to sit at a metre and four fifths, which was right while the cube was
+## a box and read a whole corner width across. Rounding the collider off took
+## thirty centimetres out of what actually kills it and left this behind, too shy
+## by exactly that much. Thirty centimetres is nothing in a corridor and it is
+## the whole thing on a loop that circles a single block: the cells of a ring like
+## that are two metres apart, so a cube that insists on one metre eight can never
+## be anywhere on it while the blade is, and the plan simply has no way through
+const MIN_ROOM_SHARE := 0.72
 
 ## How long a bot may go without covering ground before it stops being careful,
 ## how far it has to have got in that time to count, and how long it stays
@@ -392,7 +399,7 @@ func _think() -> void:
 		_lay_route(_goal)
 
 	if _skill.plans_in_time:
-		_lay_timed_plan(_goal)
+		_lay_timed_plan()
 
 
 ## Lays out the run of fresh floor in front of the cube, and says whether it
@@ -822,6 +829,18 @@ func _weighs_blades(walked: int) -> bool:
 ## Lays out where the cube means to stand on each beat from now, and falls back
 ## to walking the plain route when there is nothing to plan against.
 ##
+## The cell it plans to is the objective itself and never the goal the rest of
+## the thinking settled on.
+##
+## Those two part company at the worst possible moment. A route to a cell the cube
+## is already standing on comes back empty, and an empty route makes the goal a
+## cell picked at random — which is not a landmark, which the search will not plan
+## to, which left the plan empty. And an empty plan is not a cube that waits: every
+## reader of it falls straight through to the plain route and the reflex, so the
+## rung quietly stopped being the rung and walked into the first blade it met. It
+## did that standing on the doorstep of the lift, with the key, at full margin,
+## which is exactly where it was dying
+##
 ## This is the whole of the legend rung. Everything else in here reads the blades
 ## as things to be near or not near right now; this reads them as things that are
 ## somewhere else in two seconds, which is the difference between a corridor being
@@ -829,11 +848,19 @@ func _weighs_blades(walked: int) -> bool:
 ## blades outrun the cube cannot be walked any other way — there is nowhere to
 ## dodge to at a wall, and waiting one beat at the corner is the answer the rest
 ## of the ladder has no way of even asking about
-func _lay_timed_plan(target: Vector2i) -> void:
+func _lay_timed_plan() -> void:
 	_grid_span = _cell_span()
 	_grid_origin = _world_of(Vector2i.ZERO)
-	_plan = _search_in_time(target)
 	_plan_at = _clock
+
+	var aim := _squad.exit_cell() if Match.has_key(_account) else _squad.key_cell()
+
+	if aim.x < 0:
+		_plan = [] as Array[Vector2i]
+		return
+
+	var found := _search_in_time(aim)
+	_plan = found if not found.is_empty() else ([_here(), _here()] as Array[Vector2i])
 
 	if _plan.size() < 2:
 		_plan = _route.slice(maxi(_step - 1, 0))
@@ -858,6 +885,13 @@ func _plan_beat() -> float:
 ## make costs exactly one beat — a step to a neighbour and standing still are the
 ## same beat, and standing still is a move like any other. That is the one thing
 ## this has that a route through cells alone cannot express.
+##
+## A step has to keep both of its cells, the one being left as much as the one
+## being entered. A beat is the time the cube needs to cross a cell, so for the
+## whole of it the cube is somewhere between the two middles and in neither — and
+## checking only the destination is how it was cut in half at a metre and a
+## quarter by a blade that swept the cell it was still halfway out of, on a plan
+## that had promised it a metre and a half of room.
 ##
 ## A search that never once found a cell to step onto is a cube with a blade
 ## coming and nowhere to be, and that is the one case the plan is not allowed to
@@ -901,7 +935,8 @@ func _search_in_time(target: Vector2i) -> Array[Vector2i]:
 					continue
 
 				var key := Vector3i(to.x, to.y, beat + 1)
-				if seen.has(key) or _blade_due(calendar, to, beat + 1):
+				if seen.has(key) or _blade_due(calendar, to, beat + 1) \
+						or _blade_due(calendar, cell, beat + 1):
 					continue
 
 				seen[key] = true
@@ -992,12 +1027,23 @@ func _walk_back(came_from: Dictionary, last: Vector3i, here: Vector2i) -> Array[
 	return plan
 
 
-## The five things a cube may do with one beat. Standing still comes first so it
-## is the move a tie falls back on: where two lines through the blades are equally
-## good, the one that has not committed the cube to a corridor is the better one
+## The five things a cube may do with one beat, walking before waiting.
+##
+## The order is the whole of it, and it used to be the other way round. A flood
+## fill hands each cell-and-beat to whichever move reached it first, so with
+## standing still tried first every state that could be reached either way was
+## filed under the waiting one — and the route read back out of that begins with a
+## wait almost every time. On its own that would cost a beat. What made it cost
+## the level is that a plan is laid again every seventh of a second and a beat
+## lasts a third of one: the cube waited, was handed the same answer before the
+## beat was out, waited again, and stood in an empty corridor with the nearest
+## blade three cells away doing that for a quarter of the level.
+##
+## Waiting still wins where it is the only thing that is safe, which is the only
+## place it was ever meant to win
 func _plan_moves() -> Array[Vector2i]:
-	var moves: Array[Vector2i] = [Vector2i.ZERO]
-	moves.append_array(_turn_order)
+	var moves: Array[Vector2i] = _turn_order.duplicate()
+	moves.append(Vector2i.ZERO)
 	return moves
 
 
@@ -1091,7 +1137,14 @@ func _is_hunter(mover: SawMover) -> bool:
 ## corridor the plan called clear while the blade was still standing in it.
 ##
 ## And it is sampled far finer than a beat, because what is being written down is
-## the path the blade takes and not the places it happens to be looked at
+## the path the blade takes and not the places it happens to be looked at.
+##
+## The room is the rung's own and does not grow with the blade's speed. Widening
+## it by how far a fast blade travels between two thinks was tried, on the theory
+## that a plan goes stale while it is being walked: it cost a metre and a quarter
+## of clearance around every quick saw, which shuts corridors a person can see are
+## open and leaves the cube standing in them — and it did not save a single death.
+## Whatever is walking cubes into blades is not the width of this circle
 func _mark_blade_route(calendar: Array, mover: SawMover, horizon: int, beat: float,
 		covered: int) -> void:
 	var at: Vector3 = mover.parent.global_position
@@ -1099,17 +1152,20 @@ func _mark_blade_route(calendar: Array, mover: SawMover, horizon: int, beat: flo
 	if _is_hunter(mover):
 		_hunted.append(_cell_point(at))
 
-	if covered <= 0:
-		_mark_blade(calendar[0], at, _planner_room())
+	var pace := mover.speed * mover.speed_multiplier
+	var room := _planner_room()
 
-	var slices := _slices_per_beat(mover.speed * mover.speed_multiplier, beat)
+	if covered <= 0:
+		_mark_blade(calendar[0], at, room)
+
+	var slices := _slices_per_beat(pace, beat)
 	var walk := mover.forecast(beat / float(slices), horizon * slices)
 
 	for sample in range(walk.size()):
 		var page := (sample + 1) / slices
 
 		if page >= covered and page < calendar.size():
-			_mark_blade(calendar[page], walk[sample], _planner_room())
+			_mark_blade(calendar[page], walk[sample], room)
 
 
 ## What a cell costs on top of the walk, for being near something that is chasing
@@ -1379,6 +1435,7 @@ func _route_direction() -> Vector3:
 	if _skill.plans_in_time and not _plan.is_empty():
 		return _plan_direction()
 
+
 	while _step < _route.size() \
 			and _flat(_world_of(_route[_step]) - at).length() < CELL_REACH:
 		_step += 1
@@ -1390,13 +1447,25 @@ func _route_direction() -> Vector3:
 
 
 ## True once this bot is at the way out with what the doors ask for, and the last
-## thing left to do is walk into the cabin
+## thing left to do is walk into the cabin.
+##
+## The cabin is carved into a wall, so it is not a cell any route may be laid
+## through and this last step is walked straight at it with nothing weighed. That
+## is fine for a rung that was reacting to the blades anyway — but it was the one
+## place a timed plan was thrown away and the cube sent off blind, with the key,
+## a step from the door, and a patrol sweeping the doorstep. So on a rung that
+## plans, the plan has to have cleared where the cube is standing first: it says
+## so by naming that cell again for the beat ahead, and only then is the last step
+## taken
 func _boarding() -> bool:
 	if _squad.elevator_spawner == null or not Match.has_key(_account):
 		return false
 
 	var door := _squad.exit_cell()
-	return door.x >= 0 and Vector2(_here() - door).length() <= 1.5
+	if door.x < 0 or Vector2(_here() - door).length() > 1.5:
+		return false
+
+	return not _skill.plans_in_time or (_plan.size() >= 2 and _plan[1] == _here())
 
 
 ## Cuts it that much finer around the blades from here on, 1 being the room the

@@ -42,6 +42,16 @@ const PROGRESS_EVERY := 3.0
 const SQUEEZE_AFTER := 3
 const SQUEEZE_TO := 0.85
 
+## And this many with nothing to show takes it down to the last of it, the margin
+## that is only just wider than the two blades touching.
+##
+## Two steps rather than one because the far end of it is genuinely fine and
+## genuinely uncomfortable, and there is no reason to spend it on a corridor a
+## smaller give would have opened. What it buys is the geometry nothing else
+## can: a blade circling one block leaves gaps two metres wide and a moment
+## long, and a cube that will not cut it that fine has no way past at all
+const SQUEEZE_HARD_AFTER := 5
+
 ## This many in a row with nothing to show is a corridor the brain will not walk
 ## into, and it is told to run it instead. That is what a person does at a patrol
 ## that never quite clears, and it is as dangerous for the cube as it sounds —
@@ -171,6 +181,8 @@ func _watch_for_progress(delta: float) -> void:
 		return
 	elif _stalled_looks >= DASH_AFTER:
 		_brain.dash(DASH_FOR)
+	elif _stalled_looks >= SQUEEZE_HARD_AFTER:
+		_brain.squeeze(0.0)
 	elif _stalled_looks >= SQUEEZE_AFTER:
 		_brain.squeeze(SQUEEZE_TO)
 
